@@ -4,12 +4,20 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use super::Config;
 use crate::domain::RustRelease;
 
+/// Database access layer backed by redb.
+///
+/// Provides CRUD operations for `RustRelease` records, persisted in a local
+/// redb key-value store.
 pub struct Db {
     db: Database,
     table_name: String,
 }
 
 impl Db {
+    /// Open or create the database at the path derived from `config`.
+    ///
+    /// Creates parent directories if needed. If the existing database has an
+    /// incompatible file format version, it will be recreated automatically.
     pub fn open(config: &Config) -> Result<Self> {
         let db_path = config.db_path()?;
         if let Some(parent) = db_path.parent() {
@@ -42,6 +50,9 @@ impl Db {
         Ok(Self { db, table_name })
     }
 
+    /// Insert or update all release records into the database.
+    ///
+    /// Returns the number of records written.
     pub fn upsert_all(&self, releases: &[RustRelease]) -> Result<u64> {
         let write_txn = self.db.begin_write()?;
         let mut count = 0u64;

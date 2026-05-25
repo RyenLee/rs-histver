@@ -23,7 +23,7 @@ impl App {
         Ok(Self { config, db })
     }
 
-    /// Dispatch subcommand to corresponding handler
+    /// Dispatch subcommand to the corresponding handler method
     pub async fn execute(&self, command: Commands) -> Result<()> {
         match command {
             Commands::Sync {

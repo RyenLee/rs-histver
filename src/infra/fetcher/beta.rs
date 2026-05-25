@@ -7,7 +7,10 @@ use crate::infra::Config;
 use super::http::probe_channel_history;
 use super::ReleaseFetcher;
 
-/// Beta channel fetcher
+/// Beta channel fetcher.
+///
+/// Probes the static.rust-lang.org channel TOML files for the most recent
+/// `days` to discover beta releases.
 pub(super) struct BetaFetcher {
     days: u32,
 }

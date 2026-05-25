@@ -2,12 +2,15 @@
 name = "rs-histver"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 description = "A CLI tool to query Rust historical release versions with local redb cache"
+authors = ["RyenLee <ryenlee@example.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/RyenLee/rs-histver"
 homepage = "https://github.com/RyenLee/rs-histver"
+documentation = "https://github.com/RyenLee/rs-histver#readme"
 readme = "README.md"
-keywords = ["rust", "versions", "cli", "release"]
+keywords = ["rust", "versions", "cli", "release", "redb"]
 categories = ["command-line-utilities", "development-tools"]
 include = [
     "src/**/*",

@@ -4,13 +4,13 @@
 # Database file path (supports absolute and relative paths)
 # Relative paths are based on the executable directory
 # Leave empty to use system default path:
-#   Windows: %LOCALAPPDATA%/rs-histver/releases.redb
-#   Linux:   ~/.local/share/rs-histver/releases.redb
-#   macOS:   ~/Library/Application Support/rs-histver/releases.redb
-path = "data/config.redb"
+#   Windows: %LOCALAPPDATA%/rs-histver/rs-histver.redb
+#   Linux:   ~/.local/share/rs-histver/rs-histver.redb
+#   macOS:   ~/Library/Application Support/rs-histver/rs-histver.redb
+path = "data/rs-histver.redb"
 
 # Database table name
-table_name = "rust_releases"
+table_name = "rs_histver"
 
 [network]
 # HTTP request timeout (seconds)

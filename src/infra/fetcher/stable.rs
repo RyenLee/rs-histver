@@ -19,7 +19,10 @@ struct GhRelease {
     draft: bool,
 }
 
-/// Stable channel fetcher
+/// Stable channel fetcher.
+///
+/// Uses GitHub Releases API by default, or `RELEASES.md` for full historical
+/// data when `full` is enabled.
 pub(super) struct StableFetcher {
     full: bool,
 }

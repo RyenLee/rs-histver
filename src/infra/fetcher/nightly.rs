@@ -7,7 +7,10 @@ use crate::infra::Config;
 use super::http::probe_channel_history;
 use super::ReleaseFetcher;
 
-/// Nightly channel fetcher
+/// Nightly channel fetcher.
+///
+/// Probes the static.rust-lang.org channel TOML files for the most recent
+/// `days` to discover nightly releases.
 pub(super) struct NightlyFetcher {
     days: u32,
 }

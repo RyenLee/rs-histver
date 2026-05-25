@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 /// No dependency on any other business module to avoid circular dependencies.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RustRelease {
+    /// Release version string (e.g. "1.75.0", "1.76.0-nightly")
     pub version: String,
+    /// Release date in YYYY-MM-DD format
     pub date: String,
+    /// Release channel: "stable", "beta", or "nightly"
     pub channel: String,
 }
 

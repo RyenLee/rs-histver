@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand, ValueEnum};
 
-/// Release channel
+/// Rust release channel.
+///
+/// Represents the three Rust release tracks: stable, beta, and nightly.
 #[derive(Clone, ValueEnum)]
 pub enum Channel {
     Stable,

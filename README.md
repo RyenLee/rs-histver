@@ -157,24 +157,41 @@ user_agent = "rs-histver/0.1"
 
 ```
 src/
-├── main.rs       # Entry point
-├── cli.rs        # CLI definitions (Channel, Cli, Commands)
-├── model.rs      # Data model (RustRelease)
-├── config.rs     # Configuration loading
-├── app.rs        # Business logic layer
-├── db.rs         # Database access layer (redb)
-└── fetcher.rs    # Fetcher trait + factory (Strategy + Factory Method)
-    └── fetcher/
-        ├── common.rs  # Shared HTTP/TOML utilities
-        ├── stable.rs  # StableFetcher
-        ├── beta.rs    # BetaFetcher
-        └── nightly.rs # NightlyFetcher
+├── main.rs              # Entry point
+├── cli.rs               # CLI module root
+│   └── cli/
+│       └── types.rs     # Channel enum, Cli, Commands definitions
+├── domain.rs             # Domain module root
+│   └── domain/
+│       └── release.rs   # RustRelease data model
+├── infra.rs              # Infrastructure module root
+│   ├── infra/
+│   │   ├── config.rs    # Configuration loading (Config, DatabaseConfig, NetworkConfig)
+│   │   ├── database.rs  # Database access layer (Db, redb)
+│   │   └── fetcher.rs   # ReleaseFetcher trait + create_fetcher factory
+│   └── infra/fetcher/
+│       ├── http.rs      # Shared HTTP client & TOML utilities
+│       ├── stable.rs    # StableFetcher (GitHub API / RELEASES.md)
+│       ├── beta.rs      # BetaFetcher (channel TOML probing)
+│       └── nightly.rs   # NightlyFetcher (channel TOML probing)
+└── app.rs                # Application module root
+    └── app/
+        ├── handler.rs   # App struct + business logic
+        └── display.rs   # Table formatting utilities
 ```
 
 ## Design Patterns
 
 - **Strategy Pattern**: `ReleaseFetcher` trait — each channel implements its own fetch logic
 - **Factory Method**: `create_fetcher()` — creates the appropriate fetcher based on channel name
+
+## API Documentation
+
+Full API documentation is available on [docs.rs](https://docs.rs/rs-histver) after publishing, or generate locally:
+
+```bash
+cargo doc --open
+```
 
 ## License
 
