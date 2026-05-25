@@ -1,5 +1,9 @@
 # rs-histver
 
+[![Crates.io](https://img.shields.io/crates/v/rs-histver.svg)](https://crates.io/crates/rs-histver)
+[![Documentation](https://docs.rs/rs-histver/badge.svg)](https://docs.rs/rs-histver)
+[![License](https://img.shields.io/crates/l/rs-histver.svg)](https://github.com/RyenLee/rs-histver#license)
+
 A CLI tool to query Rust historical release versions with local redb cache. Supports stable, beta, and nightly channels.
 
 ## Installation
@@ -149,9 +153,9 @@ user_agent = "rs-histver/0.1"
 
 | OS | Path |
 |----|------|
-| Windows | `%LOCALAPPDATA%\rs-histver\releases.redb` |
-| Linux | `~/.local/share/rs-histver/releases.redb` |
-| macOS | `~/Library/Application Support/rs-histver/releases.redb` |
+| Windows | `%LOCALAPPDATA%\rs-histver\rs-histver.redb` |
+| Linux | `~/.local/share/rs-histver/rs-histver.redb` |
+| macOS | `~/Library/Application Support/rs-histver/rs-histver.redb` |
 
 ## Project Structure
 
@@ -180,18 +184,74 @@ src/
         └── display.rs   # Table formatting utilities
 ```
 
+## API Documentation
+
+Full API documentation is available on [docs.rs](https://docs.rs/rs-histver).
+
+### Usage as a Library
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+rs-histver = "0.1"
+```
+
+#### Basic Usage
+
+```rust
+use rs_histver::infra::{Config, Db};
+use rs_histver::infra::fetcher::{create_fetcher, ReleaseFetcher};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Load configuration
+    let config = Config::default();
+    
+    // Open database
+    let db = Db::open(&config)?;
+    
+    // Fetch and sync releases
+    let fetcher = create_fetcher("stable", false, 30);
+    let releases = fetcher.fetch(&config).await?;
+    db.upsert_all(&releases)?;
+    
+    // Query releases
+    let all = db.list_all(None)?;
+    let stable = db.list_all(Some("stable"))?;
+    let search = db.search("1.75", None)?;
+    
+    Ok(())
+}
+```
+
+#### Co-locate with Target Project
+
+Use `Config::co_locate()` to automatically place the database in the same directory as your target project's database:
+
+```rust
+use rs_histver::infra::Config;
+
+// Scan target project's config file and place db in the same directory
+let config = Config::co_locate(
+    Some("project/app.toml"),   // Optional: path to target config
+    None,                       // Optional: target db path
+    Some("project/data"),       // Optional: fallback directory
+);
+
+// Result: project/data/rs-histver.redb
+```
+
+**Supported target config formats:**
+- `[database] path = "data/project.db"`
+- `database_url = "sqlite://./data/project.db"`
+- `database_url = "sqlite:./data/project.db"`
+- `db_path = "./data/project.db"`
+
 ## Design Patterns
 
 - **Strategy Pattern**: `ReleaseFetcher` trait — each channel implements its own fetch logic
 - **Factory Method**: `create_fetcher()` — creates the appropriate fetcher based on channel name
-
-## API Documentation
-
-Full API documentation is available on [docs.rs](https://docs.rs/rs-histver) after publishing, or generate locally:
-
-```bash
-cargo doc --open
-```
 
 ## License
 
