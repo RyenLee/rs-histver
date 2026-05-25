@@ -1,0 +1,23 @@
+# rs-histver configuration file
+
+[database]
+# Database file path (supports absolute and relative paths)
+# Relative paths are based on the executable directory
+# Leave empty to use system default path:
+#   Windows: %LOCALAPPDATA%/rs-histver/releases.redb
+#   Linux:   ~/.local/share/rs-histver/releases.redb
+#   macOS:   ~/Library/Application Support/rs-histver/releases.redb
+path = "data/config.redb"
+
+# Database table name
+table_name = "rust_releases"
+
+[network]
+# HTTP request timeout (seconds)
+timeout = 15
+
+# Max concurrent connections (for beta/nightly history probing)
+max_concurrency = 10
+
+# Request User-Agent
+user_agent = "rs-histver/0.1"
