@@ -26,10 +26,6 @@ impl std::fmt::Display for Channel {
 #[command(about = "Query Rust historical release versions")]
 #[command(version)]
 pub struct Cli {
-    /// Path to config file
-    #[arg(short = 'C', long, global = true)]
-    pub config: Option<String>,
-
     #[command(subcommand)]
     pub command: Commands,
 }

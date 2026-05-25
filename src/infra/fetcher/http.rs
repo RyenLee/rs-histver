@@ -1,11 +1,19 @@
 use anyhow::{Context, Result};
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
 use crate::domain::RustRelease;
 use crate::infra::Config;
 
 const DATE_CHANNEL_TOML: &str = "https://static.rust-lang.org/dist";
+
+/// Cached regex for extracting date from version string.
+static DATE_RE: OnceLock<regex_lite::Regex> = OnceLock::new();
+
+fn date_regex() -> &'static regex_lite::Regex {
+    DATE_RE.get_or_init(|| regex_lite::Regex::new(r"(\d{4}-\d{2}-\d{2})").unwrap())
+}
 
 /// Build an HTTP client
 pub(super) fn build_client(config: &Config) -> Result<reqwest::Client> {
@@ -39,7 +47,7 @@ pub(super) async fn probe_channel_history(
     let mut handles = Vec::new();
 
     for i in 0..days {
-        let date = today - chrono::Duration::days(i as i64);
+        let date = today - chrono::Duration::days(i64::from(i));
         let date_str = date.format("%Y-%m-%d").to_string();
         let client = client.clone();
         let sem = semaphore.clone();
@@ -48,8 +56,7 @@ pub(super) async fn probe_channel_history(
         handles.push(tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
             let url = format!(
-                "{}/{}/channel-rust-{}.toml",
-                DATE_CHANNEL_TOML, date_str, channel
+                "{DATE_CHANNEL_TOML}/{date_str}/channel-rust-{channel}.toml"
             );
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => match resp.text().await {
@@ -88,11 +95,8 @@ fn parse_channel_toml_version(
     let end = rest.find('"')?;
     let version_str = &rest[..end];
 
-    let date_re = regex_lite::Regex::new(r"(\d{4}-\d{2}-\d{2})").ok()?;
-    let date = date_re
-        .captures(version_str)
-        .map(|c| c[1].to_string())
-        .unwrap_or_else(|| fallback_date.to_string());
+    let date = date_regex()
+        .captures(version_str).map_or_else(|| fallback_date.to_string(), |c| c[1].to_string());
 
     Some(RustRelease {
         version: version_str.to_string(),

@@ -10,7 +10,7 @@ use super::display::print_releases_table;
 /// Application core business layer.
 ///
 /// Holds config and database instances, encapsulates all business logic.
-/// main() only parses CLI args and delegates to App methods.
+/// `main()` only parses CLI args and delegates to App methods.
 pub struct App {
     config: Config,
     db: Db,
@@ -32,15 +32,15 @@ impl App {
                 days,
             } => self.handle_sync(&channel.to_string(), full, days).await,
             Commands::List { limit, channel } => {
-                let ch = channel.as_ref().map(|c| c.to_string());
+                let ch = channel.as_ref().map(std::string::ToString::to_string);
                 self.handle_list(ch.as_deref(), limit)
             }
             Commands::Search { keyword, channel } => {
-                let ch = channel.as_ref().map(|c| c.to_string());
+                let ch = channel.as_ref().map(std::string::ToString::to_string);
                 self.handle_search(&keyword, ch.as_deref())
             }
             Commands::Info { channel } => {
-                let ch = channel.as_ref().map(|c| c.to_string());
+                let ch = channel.as_ref().map(std::string::ToString::to_string);
                 self.handle_info(ch.as_deref())
             }
         }
@@ -49,7 +49,7 @@ impl App {
     // ---- Handlers ----
 
     async fn handle_sync(&self, channel: &str, full: bool, days: u32) -> Result<()> {
-        let fetcher = fetcher::create_fetcher(channel, full, days);
+        let fetcher = fetcher::create_fetcher(channel, full, days)?;
         println!(
             "Fetching Rust {} release data from remote...",
             fetcher.channel_name()
@@ -77,8 +77,7 @@ impl App {
         if releases.is_empty() {
             let hint = channel.unwrap_or("any channel");
             println!(
-                "Local cache is empty ({}), run `rs-histver sync` first",
-                hint
+                "Local cache is empty ({hint}), run `rs-histver sync` first"
             );
             return Ok(());
         }
@@ -98,7 +97,7 @@ impl App {
     fn handle_search(&self, keyword: &str, channel: Option<&str>) -> Result<()> {
         let results = self.db.search(keyword, channel)?;
         if results.is_empty() {
-            println!("No releases matching \"{}\" found", keyword);
+            println!("No releases matching \"{keyword}\" found");
             return Ok(());
         }
 
@@ -112,7 +111,7 @@ impl App {
     fn handle_info(&self, channel: Option<&str>) -> Result<()> {
         let ch_label = channel.unwrap_or("all");
         let count = self.db.count(channel)?;
-        println!("Cached releases ({}): {}", ch_label, count);
+        println!("Cached releases ({ch_label}): {count}");
         Ok(())
     }
 }

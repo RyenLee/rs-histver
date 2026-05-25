@@ -23,11 +23,11 @@ impl BetaFetcher {
 
 #[async_trait]
 impl ReleaseFetcher for BetaFetcher {
-    fn channel_name(&self) -> &str {
+    fn channel_name(&self) -> &'static str {
         "beta"
     }
 
-    fn source_description(&self) -> &str {
+    fn source_description(&self) -> &'static str {
         "Channel TOML date probing"
     }
 

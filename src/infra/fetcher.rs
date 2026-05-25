@@ -27,11 +27,15 @@ pub trait ReleaseFetcher: Send + Sync {
 /// - `channel`: one of `"stable"`, `"beta"`, or `"nightly"`.
 /// - `full`: if `true`, stable fetcher uses RELEASES.md full history instead of GitHub API.
 /// - `days`: how many days of history to probe (beta/nightly only).
-pub fn create_fetcher(channel: &str, full: bool, days: u32) -> Box<dyn ReleaseFetcher> {
+///
+/// # Errors
+///
+/// Returns an error if the channel name is not recognized.
+pub fn create_fetcher(channel: &str, full: bool, days: u32) -> Result<Box<dyn ReleaseFetcher>> {
     match channel {
-        "stable" => Box::new(stable::StableFetcher::new(full)),
-        "beta" => Box::new(beta::BetaFetcher::new(days)),
-        "nightly" => Box::new(nightly::NightlyFetcher::new(days)),
-        _ => unreachable!("Unknown channel: {}", channel),
+        "stable" => Ok(Box::new(stable::StableFetcher::new(full))),
+        "beta" => Ok(Box::new(beta::BetaFetcher::new(days))),
+        "nightly" => Ok(Box::new(nightly::NightlyFetcher::new(days))),
+        _ => anyhow::bail!("Unknown channel: '{channel}'. Must be one of: stable, beta, nightly"),
     }
 }

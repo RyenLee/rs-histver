@@ -1,24 +1,27 @@
 [package]
 name = "rs-histver"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
-description = "A CLI tool to query Rust historical release versions with local redb cache"
-authors = ["RyenLee <ryenlee@example.com>"]
+description = "A CLI tool and library for querying Rust historical release versions with local redb cache"
+authors = ["RyenLee"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/RyenLee/rs-histver"
 homepage = "https://github.com/RyenLee/rs-histver"
-documentation = "https://github.com/RyenLee/rs-histver#readme"
+documentation = "https://docs.rs/rs-histver"
 readme = "README.md"
 keywords = ["rust", "versions", "cli", "release", "redb"]
-categories = ["command-line-utilities", "development-tools"]
+categories = ["command-line-utilities", "development-tools", "caching"]
 include = [
     "src/**/*",
-    "config.toml",
     "README.md",
     "LICENSE-MIT",
     "LICENSE-APACHE",
 ]
+
+[lib]
+name = "rs_histver"
+path = "src/lib.rs"
 
 [[bin]]
 name = "rs-histver"
@@ -35,5 +38,4 @@ anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 comfy-table = "7"
 regex-lite = "0.1"
-toml = "0.8"
 async-trait = "0.1"

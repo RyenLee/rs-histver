@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/rs-histver/badge.svg)](https://docs.rs/rs-histver)
 [![License](https://img.shields.io/crates/l/rs-histver.svg)](https://github.com/RyenLee/rs-histver#license)
 
-A CLI tool to query Rust historical release versions with local redb cache. Supports stable, beta, and nightly channels.
+A CLI tool and library for querying Rust historical release versions with local redb cache. Supports stable, beta, and nightly channels.
 
 ## Installation
 
@@ -56,7 +56,6 @@ rs-histver info -c nightly
 
 | Option | Description |
 |--------|-------------|
-| `-C, --config <PATH>` | Path to config file |
 | `-h, --help` | Show help |
 | `-V, --version` | Show version |
 
@@ -116,52 +115,30 @@ rs-histver info [OPTIONS]
 |--------|-------------|
 | `-c, --channel <CHANNEL>` | Filter by channel |
 
-## Configuration
+## Database
 
-The tool searches for `config.toml` in the following order:
+The local cache uses [redb](https://github.com/cberner/redb) with per-channel tables for efficient filtering:
 
-1. Path specified by `-C` CLI argument
-2. `config.toml` in the current working directory
-3. `config.toml` in the executable's directory
-4. Default configuration if none found
+- `rs_histver_stable` — key: date, value: version
+- `rs_histver_beta` — key: date, value: version
+- `rs_histver_nightly` — key: date, value: version
 
-### Configuration Options
+Database file is automatically created at:
 
-```toml
-[database]
-# Database file path
-# - Empty: use system default path
-# - Relative: based on executable directory
-# - Absolute: used as-is
-path = ""
-
-# Database table name
-table_name = "rust_releases"
-
-[network]
-# HTTP request timeout (seconds)
-timeout = 15
-
-# Max concurrent connections (for beta/nightly probing)
-max_concurrency = 10
-
-# Request User-Agent
-user_agent = "rs-histver/0.1"
+```
+<executable_directory>/data/rs-histver.redb
 ```
 
-### Default Database Path
+No configuration file is needed. The `data/` directory is created automatically on first use.
 
-| OS | Path |
-|----|------|
-| Windows | `%LOCALAPPDATA%\rs-histver\rs-histver.redb` |
-| Linux | `~/.local/share/rs-histver/rs-histver.redb` |
-| macOS | `~/Library/Application Support/rs-histver/rs-histver.redb` |
+> **Note:** If upgrading from v0.1.x, the database format has changed. The old database will be automatically recreated on first run.
 
 ## Project Structure
 
 ```
 src/
-├── main.rs              # Entry point
+├── lib.rs               # Library entry point (HistVer, Config, public API)
+├── main.rs              # CLI entry point
 ├── cli.rs               # CLI module root
 │   └── cli/
 │       └── types.rs     # Channel enum, Cli, Commands definitions
@@ -170,7 +147,7 @@ src/
 │       └── release.rs   # RustRelease data model
 ├── infra.rs              # Infrastructure module root
 │   ├── infra/
-│   │   ├── config.rs    # Configuration loading (Config, DatabaseConfig, NetworkConfig)
+│   │   ├── config.rs    # Configuration (Config, DatabaseConfig, NetworkConfig)
 │   │   ├── database.rs  # Database access layer (Db, redb)
 │   │   └── fetcher.rs   # ReleaseFetcher trait + create_fetcher factory
 │   └── infra/fetcher/
@@ -194,59 +171,41 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rs-histver = "0.1"
+rs-histver = "0.2"
 ```
 
 #### Basic Usage
 
 ```rust
-use rs_histver::infra::{Config, Db};
-use rs_histver::infra::fetcher::{create_fetcher, ReleaseFetcher};
+use rs_histver::{HistVer, Config};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Load configuration
-    let config = Config::default();
-    
-    // Open database
-    let db = Db::open(&config)?;
-    
-    // Fetch and sync releases
-    let fetcher = create_fetcher("stable", false, 30);
-    let releases = fetcher.fetch(&config).await?;
-    db.upsert_all(&releases)?;
-    
-    // Query releases
-    let all = db.list_all(None)?;
-    let stable = db.list_all(Some("stable"))?;
-    let search = db.search("1.75", None)?;
-    
+    // Default: database at <exe_dir>/data/rs-histver.redb
+    let hv = HistVer::new(Config::new())?;
+
+    // Fetch and cache releases
+    let releases = hv.fetch_releases("stable", false, 30).await?;
+    hv.store_releases(&releases)?;
+
+    // Query local cache
+    let all = hv.list_releases(None)?;
+    let stable = hv.list_releases(Some("stable"))?;
+    let results = hv.search_releases("1.75", None)?;
+    let count = hv.count_releases(None)?;
+
     Ok(())
 }
 ```
 
-#### Co-locate with Target Project
-
-Use `Config::co_locate()` to automatically place the database in the same directory as your target project's database:
+#### Custom Database Path
 
 ```rust
-use rs_histver::infra::Config;
+use rs_histver::{HistVer, Config};
 
-// Scan target project's config file and place db in the same directory
-let config = Config::co_locate(
-    Some("project/app.toml"),   // Optional: path to target config
-    None,                       // Optional: target db path
-    Some("project/data"),       // Optional: fallback directory
-);
-
-// Result: project/data/rs-histver.redb
+// Use a custom database location
+let hv = HistVer::new(Config::with_db_path("/path/to/my-cache.redb"))?;
 ```
-
-**Supported target config formats:**
-- `[database] path = "data/project.db"`
-- `database_url = "sqlite://./data/project.db"`
-- `database_url = "sqlite:./data/project.db"`
-- `db_path = "./data/project.db"`
 
 ## Design Patterns
 

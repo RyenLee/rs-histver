@@ -13,10 +13,3 @@ pub struct RustRelease {
     /// Release channel: "stable", "beta", or "nightly"
     pub channel: String,
 }
-
-impl RustRelease {
-    /// Generate redb primary key: "channel:version:date"
-    pub fn db_key(&self) -> String {
-        format!("{}:{}:{}", self.channel, self.version, self.date)
-    }
-}

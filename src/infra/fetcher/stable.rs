@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 use crate::domain::RustRelease;
 use crate::infra::Config;
@@ -10,6 +11,15 @@ use super::ReleaseFetcher;
 
 const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/rust-lang/rust/releases";
 const RELEASES_MD_URL: &str = "https://raw.githubusercontent.com/rust-lang/rust/master/RELEASES.md";
+
+/// Cached regex for parsing RELEASES.md version lines.
+static RELEASES_MD_RE: OnceLock<regex_lite::Regex> = OnceLock::new();
+
+fn releases_md_regex() -> &'static regex_lite::Regex {
+    RELEASES_MD_RE.get_or_init(|| {
+        regex_lite::Regex::new(r"Version\s+(\d+\.\d+\.\d+)\s+\((\d{4}-\d{2}-\d{2})\)").unwrap()
+    })
+}
 
 #[derive(Debug, Deserialize)]
 struct GhRelease {
@@ -35,7 +45,7 @@ impl StableFetcher {
 
 #[async_trait]
 impl ReleaseFetcher for StableFetcher {
-    fn channel_name(&self) -> &str {
+    fn channel_name(&self) -> &'static str {
         "stable"
     }
 
@@ -62,12 +72,12 @@ async fn fetch_from_github(config: &Config) -> Result<Vec<RustRelease>> {
     let mut page = 1u32;
 
     loop {
-        let url = format!("{}?per_page=100&page={}", GITHUB_RELEASES_API, page);
+        let url = format!("{GITHUB_RELEASES_API}?per_page=100&page={page}");
         let resp = client
             .get(&url)
             .send()
             .await
-            .with_context(|| format!("Failed to request GitHub Releases API (page {})", page))?;
+            .with_context(|| format!("Failed to request GitHub Releases API (page {page})"))?;
 
         if !resp.status().is_success() {
             anyhow::bail!(
@@ -123,8 +133,7 @@ async fn fetch_from_releases_md(config: &Config) -> Result<Vec<RustRelease>> {
         .context("Failed to read RELEASES.md content")?;
 
     let mut releases = Vec::new();
-    let re = regex_lite::Regex::new(r"Version\s+(\d+\.\d+\.\d+)\s+\((\d{4}-\d{2}-\d{2})\)")?;
-    for cap in re.captures_iter(&text) {
+    for cap in releases_md_regex().captures_iter(&text) {
         releases.push(RustRelease {
             version: cap[1].to_string(),
             date: cap[2].to_string(),

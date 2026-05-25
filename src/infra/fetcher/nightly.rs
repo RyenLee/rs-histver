@@ -23,11 +23,11 @@ impl NightlyFetcher {
 
 #[async_trait]
 impl ReleaseFetcher for NightlyFetcher {
-    fn channel_name(&self) -> &str {
+    fn channel_name(&self) -> &'static str {
         "nightly"
     }
 
-    fn source_description(&self) -> &str {
+    fn source_description(&self) -> &'static str {
         "Channel TOML date probing"
     }
 
