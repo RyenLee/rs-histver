@@ -1,3 +1,3 @@
-pub mod types;
+mod types;
 
-pub use types::{Cli, Commands};
+pub use types::{Channel, Cli, Commands};

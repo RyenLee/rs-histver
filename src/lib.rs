@@ -3,7 +3,7 @@
 //! A library for querying Rust historical release versions.
 //!
 //! Pure network fetch — no database, no file system, no side effects.
-//! The **CLI binary** (`rs-histver`) additionally provides local redb caching.
+//! The **CLI binary** (`rs-histver`) additionally provides terminal formatting.
 //!
 //! ## As a library
 //!
@@ -19,33 +19,19 @@
 //!     Ok(())
 //! }
 //! ```
-//!
-//! ## Build options
-//!
-//! ```toml
-//! [dependencies]
-//! rs-histver = "0.3"                    # library only (no redb/clap dependency)
-//!
-//! # or with CLI features
-//! rs-histver = { version = "0.3", features = ["cli"] }
-//! ```
 
+mod constants;
 mod domain;
 mod options;
 
+pub mod app;
+pub mod cli;
 pub(crate) mod infra;
 
-#[cfg(feature = "cli")]
-pub mod app;
-#[cfg(feature = "cli")]
-pub mod cli;
-
+pub use constants::*;
 pub use domain::RustRelease;
 pub use infra::fetcher::{create_fetcher, ReleaseFetcher};
 pub use options::{FetchOptions, NetworkConfig};
-
-#[cfg(feature = "cli")]
-pub use infra::{Config, ConfigBuilder, Db};
 
 use anyhow::Result;
 

@@ -1,5 +1,9 @@
 use std::time::Duration;
 
+use crate::constants::{
+    default_user_agent, DEFAULT_MAX_CONCURRENCY, DEFAULT_PROBE_DAYS, DEFAULT_TIMEOUT_SECS,
+};
+
 /// Options for fetching Rust release data.
 ///
 /// All fields have sensible defaults, so `FetchOptions::default()` or
@@ -41,10 +45,10 @@ impl Default for FetchOptions {
     fn default() -> Self {
         Self {
             full_history: false,
-            probe_days: 30,
-            timeout: Duration::from_secs(15),
-            max_concurrency: 10,
-            user_agent: format!("rs-histver/{}", env!("CARGO_PKG_VERSION")),
+            probe_days: DEFAULT_PROBE_DAYS,
+            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECS),
+            max_concurrency: DEFAULT_MAX_CONCURRENCY,
+            user_agent: default_user_agent(),
         }
     }
 }
@@ -92,14 +96,67 @@ impl FetchOptions {
     }
 }
 
-/// Internal network configuration, derived from [`FetchOptions`].
+/// Network configuration for HTTP fetcher requests.
 ///
-/// Used by fetcher implementations.
+/// Created automatically from [`FetchOptions`] by [`fetch_releases`].
+/// For low-level use with [`create_fetcher`], use [`NetworkConfig::new()`]
+/// or construct via struct literal.
+///
+/// # Examples
+///
+/// ```ignore
+/// use rs_histver::{create_fetcher, NetworkConfig, ReleaseFetcher};
+///
+/// let network = NetworkConfig::new()
+///     .timeout_secs(30)
+///     .max_concurrency(5);
+/// let fetcher = create_fetcher("stable", false, 30)?;
+/// let releases = fetcher.fetch(&network).await?;
+/// ```
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
     pub timeout: u64,
     pub max_concurrency: usize,
     pub user_agent: String,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            timeout: DEFAULT_TIMEOUT_SECS,
+            max_concurrency: DEFAULT_MAX_CONCURRENCY,
+            user_agent: default_user_agent(),
+        }
+    }
+}
+
+impl NetworkConfig {
+    /// Create a new `NetworkConfig` with default values.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the HTTP request timeout in seconds.
+    #[must_use]
+    pub fn timeout_secs(mut self, secs: u64) -> Self {
+        self.timeout = secs;
+        self
+    }
+
+    /// Set the maximum number of concurrent HTTP requests.
+    #[must_use]
+    pub fn max_concurrency(mut self, n: usize) -> Self {
+        self.max_concurrency = n;
+        self
+    }
+
+    /// Set a custom User-Agent header.
+    #[must_use]
+    pub fn user_agent(mut self, ua: impl Into<String>) -> Self {
+        self.user_agent = ua.into();
+        self
+    }
 }
 
 impl From<&FetchOptions> for NetworkConfig {

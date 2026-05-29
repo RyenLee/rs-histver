@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
+use crate::constants::CHANNEL_BETA;
 use crate::domain::RustRelease;
 use crate::options::NetworkConfig;
 
@@ -24,7 +25,7 @@ impl BetaFetcher {
 #[async_trait]
 impl ReleaseFetcher for BetaFetcher {
     fn channel_name(&self) -> &'static str {
-        "beta"
+        CHANNEL_BETA
     }
 
     fn source_description(&self) -> &'static str {
@@ -32,7 +33,7 @@ impl ReleaseFetcher for BetaFetcher {
     }
 
     async fn fetch(&self, network: &NetworkConfig) -> Result<Vec<RustRelease>> {
-        let releases = probe_channel_history(network, "beta", self.days).await;
+        let releases = probe_channel_history(network, CHANNEL_BETA, self.days).await?;
         if releases.is_empty() {
             anyhow::bail!("No beta release data found");
         }

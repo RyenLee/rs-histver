@@ -1,4 +1,4 @@
-mod display;
-mod handler;
+pub mod display;
+pub mod handler;
 
 pub use handler::App;

@@ -1,96 +1,125 @@
-use clap::{Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+use clap::{Parser, Subcommand};
 
-/// Rust release channel.
+use crate::constants::{CHANNEL_BETA, CHANNEL_NIGHTLY, CHANNEL_STABLE, DEFAULT_PROBE_DAYS};
+
+/// CLI entry for rs-histver.
 ///
-/// Represents the three Rust release tracks: stable, beta, and nightly.
-#[derive(Clone, ValueEnum)]
+/// No database, no config file — pure network fetch with terminal output.
+#[derive(Parser, Debug)]
+#[command(
+    name = "rs-histver",
+    version,
+    about = "Query Rust historical release versions",
+    long_about = "Fetch Rust release history from remote sources and display in terminal.\n\n\
+                  Data sources:\n  \
+                  stable     : GitHub Releases API (--full for RELEASES.md complete history)\n  \
+                  beta       : dist/channel-rust-beta.toml date probing\n  \
+                  nightly    : dist/channel-rust-nightly.toml date probing"
+)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+/// Available subcommands.
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    /// Fetch release data from remote source (stable by default).
+    Fetch {
+        /// Release channel: stable, beta, or nightly.
+        #[arg(
+            short = 'c',
+            long = "channel",
+            default_value = "stable",
+            verbatim_doc_comment,
+            help = "Channel: stable, beta, nightly"
+        )]
+        channel: Channel,
+
+        /// Use RELEASES.md full history data source (stable only).
+        #[arg(long, help = "Use RELEASES.md full history instead of GitHub API (stable only)")]
+        full: bool,
+
+        /// Probe recent N days of history (beta/nightly).
+        #[arg(short = 'd', long = "days", default_value_t = DEFAULT_PROBE_DAYS, help = "Days to probe (beta/nightly)")]
+        days: u32,
+    },
+}
+
+/// Valid release channels.
+///
+/// Implements `FromStr` for clap parsing and `Display` for error messages.
+#[derive(Debug, Clone)]
 pub enum Channel {
     Stable,
     Beta,
     Nightly,
 }
 
-impl std::fmt::Display for Channel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Channel::Stable => write!(f, "stable"),
-            Channel::Beta => write!(f, "beta"),
-            Channel::Nightly => write!(f, "nightly"),
+impl std::str::FromStr for Channel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            CHANNEL_STABLE => Ok(Self::Stable),
+            CHANNEL_BETA => Ok(Self::Beta),
+            CHANNEL_NIGHTLY => Ok(Self::Nightly),
+            _ => Err(format!(
+                "unknown channel '{s}'. Valid values: stable, beta, nightly"
+            )),
         }
     }
 }
 
-/// CLI definition
-#[derive(Parser)]
-#[command(name = "rs-histver")]
-#[command(about = "Query Rust historical release versions")]
-#[command(version)]
-pub struct Cli {
-    /// Data directory for database files
-    #[arg(long, global = true)]
-    pub data_dir: Option<PathBuf>,
-
-    /// Database filename (enables shared mode when set)
-    #[arg(long, global = true)]
-    pub db_file: Option<String>,
-
-    /// Prefix for database table names (default: rs_histver)
-    #[arg(long, global = true)]
-    pub table_prefix: Option<String>,
-
-    /// HTTP request timeout in seconds (default: 15)
-    #[arg(long, global = true)]
-    pub timeout: Option<u64>,
-
-    /// Maximum concurrent HTTP requests (default: 10)
-    #[arg(long, global = true)]
-    pub max_concurrency: Option<usize>,
-
-    #[command(subcommand)]
-    pub command: Commands,
+impl std::fmt::Display for Channel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
-/// Subcommands
-#[derive(Subcommand)]
-pub enum Commands {
-    /// Sync release data from remote to local cache
-    Sync {
-        /// Release channel (stable/beta/nightly), default: stable
-        #[arg(short, long, value_enum, default_value = "stable")]
-        channel: Channel,
+impl Channel {
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Stable => CHANNEL_STABLE,
+            Self::Beta => CHANNEL_BETA,
+            Self::Nightly => CHANNEL_NIGHTLY,
+        }
+    }
+}
 
-        /// Use RELEASES.md as data source (stable only, more complete)
-        #[arg(long)]
-        full: bool,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
 
-        /// Probe recent N days of history (beta/nightly only, default: 30)
-        #[arg(short, long, default_value = "30")]
-        days: u32,
-    },
-    /// List cached releases
-    List {
-        /// Maximum number of entries to display
-        #[arg(short, long, default_value = "20")]
-        limit: usize,
+    #[test]
+    fn test_channel_parsing() {
+        let cli = Cli::try_parse_from(["rs-histver", "fetch", "-c", "stable"]).unwrap();
+        match cli.command {
+            Commands::Fetch { channel, .. } => assert_eq!(channel.as_str(), "stable"),
+        }
+    }
 
-        /// Filter by channel (stable/beta/nightly)
-        #[arg(short, long, value_enum)]
-        channel: Option<Channel>,
-    },
-    /// Search releases (fuzzy match by version or date)
-    Search {
-        /// Search keyword (e.g. "1.75" or "2024")
-        keyword: String,
+    #[test]
+    fn test_channel_case_insensitive() {
+        let cli = Cli::try_parse_from(["rs-histver", "fetch", "-c", "NIGHTLY"]).unwrap();
+        match cli.command {
+            Commands::Fetch { channel, .. } => assert_eq!(channel.as_str(), "nightly"),
+        }
+    }
 
-        /// Filter by channel (stable/beta/nightly)
-        #[arg(short, long, value_enum)]
-        channel: Option<Channel>,
-    },
-    /// Show local cache statistics
-    Info {
-        /// Filter by channel (stable/beta/nightly)
-        #[arg(short, long, value_enum)]
-        channel: Option<Channel>,
-    },
+    #[test]
+    fn test_invalid_channel() {
+        let result = Cli::try_parse_from(["rs-histver", "fetch", "-c", "invalid"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_default_channel() {
+        let cli = Cli::try_parse_from(["rs-histver", "fetch"]).unwrap();
+        match cli.command {
+            Commands::Fetch { channel, .. } => assert_eq!(channel.as_str(), "stable"),
+        }
+    }
 }

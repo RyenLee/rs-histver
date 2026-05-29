@@ -3,14 +3,14 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::OnceLock;
 
+use crate::constants::{
+    CHANNEL_STABLE, GITHUB_MAX_PAGES, GITHUB_PER_PAGE, GITHUB_RELEASES_API, RELEASES_MD_URL,
+};
 use crate::domain::RustRelease;
 use crate::options::NetworkConfig;
 
 use super::http::build_client;
 use super::ReleaseFetcher;
-
-const GITHUB_RELEASES_API: &str = "https://api.github.com/repos/rust-lang/rust/releases";
-const RELEASES_MD_URL: &str = "https://raw.githubusercontent.com/rust-lang/rust/master/RELEASES.md";
 
 /// Cached regex for parsing RELEASES.md version lines.
 static RELEASES_MD_RE: OnceLock<regex_lite::Regex> = OnceLock::new();
@@ -47,7 +47,7 @@ impl StableFetcher {
 #[async_trait]
 impl ReleaseFetcher for StableFetcher {
     fn channel_name(&self) -> &'static str {
-        "stable"
+        CHANNEL_STABLE
     }
 
     fn source_description(&self) -> &str {
@@ -73,7 +73,7 @@ async fn fetch_from_github(network: &NetworkConfig) -> Result<Vec<RustRelease>> 
     let mut page = 1u32;
 
     loop {
-        let url = format!("{GITHUB_RELEASES_API}?per_page=100&page={page}");
+        let url = format!("{GITHUB_RELEASES_API}?per_page={GITHUB_PER_PAGE}&page={page}");
         let resp = client
             .get(&url)
             .send()
@@ -110,12 +110,12 @@ async fn fetch_from_github(network: &NetworkConfig) -> Result<Vec<RustRelease>> 
             all.push(RustRelease {
                 version,
                 date,
-                channel: "stable".to_string(),
+                channel: CHANNEL_STABLE.to_string(),
             });
         }
 
         page += 1;
-        if page > 15 {
+        if page > GITHUB_MAX_PAGES {
             break;
         }
     }
@@ -138,7 +138,7 @@ async fn fetch_from_releases_md(network: &NetworkConfig) -> Result<Vec<RustRelea
         releases.push(RustRelease {
             version: cap[1].to_string(),
             date: cap[2].to_string(),
-            channel: "stable".to_string(),
+            channel: CHANNEL_STABLE.to_string(),
         });
     }
     Ok(releases)

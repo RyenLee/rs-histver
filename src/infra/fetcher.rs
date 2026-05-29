@@ -3,6 +3,7 @@ mod http;
 mod nightly;
 mod stable;
 
+use crate::constants::{CHANNEL_BETA, CHANNEL_NIGHTLY, CHANNEL_STABLE};
 use crate::domain::RustRelease;
 use crate::options::NetworkConfig;
 use anyhow::Result;
@@ -33,9 +34,9 @@ pub trait ReleaseFetcher: Send + Sync {
 /// Returns an error if the channel name is not recognized.
 pub fn create_fetcher(channel: &str, full: bool, days: u32) -> Result<Box<dyn ReleaseFetcher>> {
     match channel {
-        "stable" => Ok(Box::new(stable::StableFetcher::new(full))),
-        "beta" => Ok(Box::new(beta::BetaFetcher::new(days))),
-        "nightly" => Ok(Box::new(nightly::NightlyFetcher::new(days))),
+        CHANNEL_STABLE => Ok(Box::new(stable::StableFetcher::new(full))),
+        CHANNEL_BETA => Ok(Box::new(beta::BetaFetcher::new(days))),
+        CHANNEL_NIGHTLY => Ok(Box::new(nightly::NightlyFetcher::new(days))),
         _ => anyhow::bail!("Unknown channel: '{channel}'. Must be one of: stable, beta, nightly"),
     }
 }

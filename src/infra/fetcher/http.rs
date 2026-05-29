@@ -3,10 +3,9 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
+use crate::constants::STATIC_DIST_BASE_URL;
 use crate::domain::RustRelease;
 use crate::options::NetworkConfig;
-
-const DATE_CHANNEL_TOML: &str = "https://static.rust-lang.org/dist";
 
 /// Cached regex for extracting date from version string.
 static DATE_RE: OnceLock<regex_lite::Regex> = OnceLock::new();
@@ -37,17 +36,21 @@ pub(super) fn build_client_fallback(network: &NetworkConfig) -> reqwest::Client 
     })
 }
 
-/// Concurrently probe channel TOML for the recent N days (including today)
+/// Concurrently probe channel TOML for the recent N days (including today).
+///
+/// Returns `Ok(Vec)` with all discovered releases sorted by date descending.
+/// Returns `Err` only when every single probe request fails — otherwise partial
+/// results are returned with a warning printed for failed tasks.
 pub(super) async fn probe_channel_history(
     network: &NetworkConfig,
     channel: &str,
     days: u32,
-) -> Vec<RustRelease> {
+) -> Result<Vec<RustRelease>> {
     let client = Arc::new(build_client_fallback(network));
     let semaphore = Arc::new(Semaphore::new(network.max_concurrency));
     let today = chrono::Local::now().date_naive();
 
-    let mut handles = Vec::new();
+    let mut handles = Vec::with_capacity(days as usize);
 
     for i in 0..days {
         let date = today - chrono::Duration::days(i64::from(i));
@@ -61,7 +64,7 @@ pub(super) async fn probe_channel_history(
                 .acquire()
                 .await
                 .expect("Semaphore is never closed during probe");
-            let url = format!("{DATE_CHANNEL_TOML}/{date_str}/channel-rust-{channel}.toml");
+            let url = format!("{STATIC_DIST_BASE_URL}/{date_str}/channel-rust-{channel}.toml");
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => match resp.text().await {
                     Ok(text) => parse_channel_toml_version(&text, &channel, &date_str),
@@ -72,6 +75,7 @@ pub(super) async fn probe_channel_history(
         }));
     }
 
+    let total = handles.len();
     let mut results = Vec::new();
     let mut task_errors = 0u32;
     for handle in handles {
@@ -84,14 +88,20 @@ pub(super) async fn probe_channel_history(
 
     if task_errors > 0 {
         eprintln!(
-            "Warning: {}/{} probe tasks failed (panicked or were cancelled). \
+            "Warning: {}/{} probe tasks panicked or were cancelled. \
              Results may be incomplete.",
-            task_errors, days
+            task_errors, total
+        );
+    }
+
+    if results.is_empty() && task_errors > 0 && task_errors as usize == total {
+        anyhow::bail!(
+            "All {total} probe requests for '{channel}' channel failed — check network connectivity"
         );
     }
 
     results.sort_by(|a, b| b.date.cmp(&a.date));
-    results
+    Ok(results)
 }
 
 /// Parse the version field from [pkg.rust] section in a channel TOML

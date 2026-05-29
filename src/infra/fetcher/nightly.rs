@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
+use crate::constants::CHANNEL_NIGHTLY;
 use crate::domain::RustRelease;
 use crate::options::NetworkConfig;
 
@@ -24,7 +25,7 @@ impl NightlyFetcher {
 #[async_trait]
 impl ReleaseFetcher for NightlyFetcher {
     fn channel_name(&self) -> &'static str {
-        "nightly"
+        CHANNEL_NIGHTLY
     }
 
     fn source_description(&self) -> &'static str {
@@ -32,7 +33,7 @@ impl ReleaseFetcher for NightlyFetcher {
     }
 
     async fn fetch(&self, network: &NetworkConfig) -> Result<Vec<RustRelease>> {
-        let releases = probe_channel_history(network, "nightly", self.days).await;
+        let releases = probe_channel_history(network, CHANNEL_NIGHTLY, self.days).await?;
         if releases.is_empty() {
             anyhow::bail!("No nightly release data found");
         }
