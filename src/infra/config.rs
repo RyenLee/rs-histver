@@ -1,5 +1,4 @@
-use anyhow::{Context, Result};
-use serde::Deserialize;
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 pub(super) const DEFAULT_DB_FILENAME: &str = "rs-histver.redb";
@@ -10,12 +9,11 @@ const CHANNELS: &[&str] = &["stable", "beta", "nightly"];
 /// Application configuration.
 ///
 /// Holds database and network settings. Create via [`Config::new()`],
-/// [`Config::with_db_path()`], [`Config::from_config_file()`],
-/// or [`ConfigBuilder`].
+/// [`Config::with_db_path()`], or [`ConfigBuilder`].
 ///
 /// # Priority order
 ///
-/// Programmatic override → config.toml → hardcoded defaults
+/// Programmatic override → hardcoded defaults
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database: DatabaseConfig,
@@ -88,27 +86,6 @@ fn exe_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn home_dir() -> PathBuf {
-    std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-}
-
-fn resolve_path_vars(path_str: &str) -> PathBuf {
-    let s = path_str.trim();
-
-    if let Some(stripped) = s.strip_prefix("~/") {
-        return home_dir().join(stripped);
-    }
-
-    let resolved = s
-        .replace("$EXE_DIR", &exe_dir().to_string_lossy())
-        .replace("$HOME", &home_dir().to_string_lossy());
-
-    PathBuf::from(resolved)
-}
-
 impl Config {
     /// Create a new `Config` with default values.
     ///
@@ -142,67 +119,22 @@ impl Config {
         &self.database.path
     }
 
-    /// Load configuration from a host project's `config.toml`.
-    ///
-    /// Supports `[paths].data_dir` with variable substitution (`$EXE_DIR`, `$HOME`, `~/`),
-    /// `[rs-histver.database]` (table_prefix, db_file), and `[rs-histver.network]`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be read or parsed.
-    pub fn from_config_file(path: impl Into<PathBuf>) -> Result<Self> {
-        ConfigBuilder::new().config_file(path).build()
-    }
-
     /// Create a [`ConfigBuilder`] for fine-grained configuration.
     ///
-    /// Supports method chaining with config file + programmatic overrides.
+    /// Supports method chaining with programmatic overrides.
     pub fn builder() -> ConfigBuilder {
         ConfigBuilder::new()
     }
 }
 
-// ---- Config file deserialization ----
-
-#[derive(Debug, Deserialize, Default)]
-struct ConfigFile {
-    paths: Option<PathsConfig>,
-    #[serde(rename = "rs-histver")]
-    rs_histver: Option<RsHistverConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PathsConfig {
-    data_dir: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RsHistverConfig {
-    database: Option<DatabaseConfigFile>,
-    network: Option<NetworkConfigFile>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DatabaseConfigFile {
-    table_prefix: Option<String>,
-    db_file: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NetworkConfigFile {
-    timeout: Option<u64>,
-    max_concurrency: Option<usize>,
-}
-
 // ---- ConfigBuilder ----
 
-/// Builder for constructing [`Config`] with flexible priority.
+/// Builder for constructing [`Config`] with flexible overrides.
 ///
-/// Supports three levels of configuration, from highest to lowest priority:
+/// Supports two levels of configuration, from highest to lowest priority:
 ///
 /// 1. **Programmatic override** — `db_path()`, `data_dir()`, `db_file()`, etc.
-/// 2. **Config file** — values from `config.toml`, loaded via `config_file()`.
-/// 3. **Hardcoded defaults** — applied when no other source provides a value.
+/// 2. **Hardcoded defaults** — applied when no override provides a value.
 ///
 /// # Examples
 ///
@@ -220,15 +152,8 @@ struct NetworkConfigFile {
 ///     .db_file("myapp.redb")
 ///     .table_prefix("myapp_histver")
 ///     .build()?;
-///
-/// // Config file + programmatic overrides
-/// let config = ConfigBuilder::new()
-///     .config_file("config.toml")
-///     .timeout(60)
-///     .build()?;
 /// ```
 pub struct ConfigBuilder {
-    config_file_path: Option<PathBuf>,
     db_path_override: Option<PathBuf>,
     data_dir_override: Option<PathBuf>,
     db_file_override: Option<String>,
@@ -247,7 +172,6 @@ impl ConfigBuilder {
     /// Create a new `ConfigBuilder` with no overrides set.
     pub fn new() -> Self {
         Self {
-            config_file_path: None,
             db_path_override: None,
             data_dir_override: None,
             db_file_override: None,
@@ -255,15 +179,6 @@ impl ConfigBuilder {
             timeout_override: None,
             max_concurrency_override: None,
         }
-    }
-
-    /// Load configuration from a host project's `config.toml`.
-    ///
-    /// File values are lower priority than per-field overrides and higher
-    /// priority than hardcoded defaults.
-    pub fn config_file(mut self, path: impl Into<PathBuf>) -> Self {
-        self.config_file_path = Some(path.into());
-        self
     }
 
     /// Set a complete database file path (highest priority, standalone mode).
@@ -314,83 +229,39 @@ impl ConfigBuilder {
         self
     }
 
-    /// Build the final [`Config`], applying priority: programmatic > file > defaults.
+    /// Build the final [`Config`], applying priority: programmatic > defaults.
     ///
     /// In shared mode (when `db_file()` is set) with the default `table_prefix`,
     /// a warning is printed to stderr to prevent table name collisions.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the config file exists but cannot be read or parsed.
     pub fn build(self) -> Result<Config> {
-        let file_cfg = self.load_config_file()?;
-
-        let db_file = self.db_file_override.or_else(|| {
-            file_cfg
-                .as_ref()
-                .and_then(|c| c.rs_histver.as_ref())
-                .and_then(|h| h.database.as_ref())
-                .and_then(|d| d.db_file.clone())
-        });
-
-        let data_dir = self.data_dir_override.or_else(|| {
-            file_cfg
-                .as_ref()
-                .and_then(|c| c.paths.as_ref())
-                .and_then(|p| p.data_dir.as_ref())
-                .map(|dir| resolve_path_vars(dir))
-        });
-
         let (db_path, shared) = if let Some(path) = self.db_path_override {
             (path, false)
-        } else if let Some(file_name) = db_file {
-            let dir = data_dir.unwrap_or_else(|| exe_dir().join(DEFAULT_DATA_DIR));
+        } else if let Some(file_name) = self.db_file_override {
+            let dir = self
+                .data_dir_override
+                .unwrap_or_else(|| exe_dir().join(DEFAULT_DATA_DIR));
             (dir.join(&file_name), true)
         } else {
-            let dir = data_dir.unwrap_or_else(|| exe_dir().join(DEFAULT_DATA_DIR));
+            let dir = self
+                .data_dir_override
+                .unwrap_or_else(|| exe_dir().join(DEFAULT_DATA_DIR));
             (dir.join(DEFAULT_DB_FILENAME), false)
         };
 
         let table_prefix = self
             .table_prefix_override
-            .or_else(|| {
-                file_cfg
-                    .as_ref()
-                    .and_then(|c| c.rs_histver.as_ref())
-                    .and_then(|h| h.database.as_ref())
-                    .and_then(|d| d.table_prefix.clone())
-            })
             .unwrap_or_else(|| DEFAULT_TABLE_PREFIX.to_string());
 
         if shared && table_prefix == DEFAULT_TABLE_PREFIX {
             eprintln!(
                 "Warning: Shared database mode with default table_prefix \
                  ('{DEFAULT_TABLE_PREFIX}') may cause table name conflicts. \
-                 Consider setting [rs-histver.database].table_prefix in config.toml."
+                 Consider setting a custom table_prefix."
             );
         }
 
-        let timeout = self
-            .timeout_override
-            .or_else(|| {
-                file_cfg
-                    .as_ref()
-                    .and_then(|c| c.rs_histver.as_ref())
-                    .and_then(|h| h.network.as_ref())
-                    .and_then(|n| n.timeout)
-            })
-            .unwrap_or(15);
-
-        let max_concurrency = self
-            .max_concurrency_override
-            .or_else(|| {
-                file_cfg
-                    .as_ref()
-                    .and_then(|c| c.rs_histver.as_ref())
-                    .and_then(|h| h.network.as_ref())
-                    .and_then(|n| n.max_concurrency)
-            })
-            .unwrap_or(10);
+        let timeout = self.timeout_override.unwrap_or(15);
+        let max_concurrency = self.max_concurrency_override.unwrap_or(10);
 
         Ok(Config {
             database: DatabaseConfig {
@@ -404,23 +275,6 @@ impl ConfigBuilder {
                 user_agent: format!("rs-histver/{}", env!("CARGO_PKG_VERSION")),
             },
         })
-    }
-
-    fn load_config_file(&self) -> Result<Option<ConfigFile>> {
-        let path = match &self.config_file_path {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-
-        if !path.exists() {
-            return Err(anyhow::anyhow!("Config file not found: {}", path.display()));
-        }
-
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-        let cfg: ConfigFile = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
-        Ok(Some(cfg))
     }
 }
 
@@ -507,16 +361,6 @@ mod tests {
     }
 
     #[test]
-    fn test_builder_missing_config_file_falls_back() {
-        let result = ConfigBuilder::new()
-            .config_file("/nonexistent/config.toml")
-            .build();
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains("Config file not found"));
-    }
-
-    #[test]
     fn test_builder_default_fallback() {
         let config = ConfigBuilder::new().build().unwrap();
         assert_eq!(config.database.table_prefix, "rs_histver");
@@ -578,88 +422,5 @@ mod tests {
             PathBuf::from("/tmp/mydata/rs-histver.redb")
         );
         assert!(!config.database.shared);
-    }
-
-    #[test]
-    fn test_config_file_parse() {
-        let toml_str = r#"
-[paths]
-data_dir = "/opt/myapp/data"
-
-[rs-histver.database]
-table_prefix = "myapp_histver"
-db_file = "myapp.redb"
-
-[rs-histver.network]
-timeout = 30
-max_concurrency = 5
-"#;
-        let cfg: ConfigFile = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.paths.unwrap().data_dir.unwrap(), "/opt/myapp/data");
-        let rh = cfg.rs_histver.unwrap();
-        let db_cfg = rh.database.unwrap();
-        assert_eq!(db_cfg.table_prefix.unwrap(), "myapp_histver");
-        assert_eq!(db_cfg.db_file.unwrap(), "myapp.redb");
-        let net = rh.network.unwrap();
-        assert_eq!(net.timeout.unwrap(), 30);
-        assert_eq!(net.max_concurrency.unwrap(), 5);
-    }
-
-    #[test]
-    fn test_config_file_partial() {
-        let toml_str = r#"
-[paths]
-data_dir = "/opt/myapp/data"
-"#;
-        let cfg: ConfigFile = toml::from_str(toml_str).unwrap();
-        assert!(cfg.rs_histver.is_none());
-        assert_eq!(cfg.paths.unwrap().data_dir.unwrap(), "/opt/myapp/data");
-    }
-
-    #[test]
-    fn test_resolve_path_vars_tilde() {
-        let resolved = resolve_path_vars("~/myapp/data");
-        let home = home_dir();
-        assert_eq!(resolved, home.join("myapp/data"));
-    }
-
-    #[test]
-    fn test_resolve_path_vars_exe_dir() {
-        let resolved = resolve_path_vars("$EXE_DIR/data");
-        let expected = exe_dir().join("data");
-        assert_eq!(resolved, expected);
-    }
-
-    #[test]
-    fn test_resolve_path_vars_home_var() {
-        let resolved = resolve_path_vars("$HOME/myapp/data");
-        let expected = home_dir().join("myapp/data");
-        assert_eq!(resolved, expected);
-    }
-
-    #[test]
-    fn test_resolve_path_vars_literal() {
-        let resolved = resolve_path_vars("/opt/myapp/data");
-        assert_eq!(resolved, PathBuf::from("/opt/myapp/data"));
-    }
-
-    #[test]
-    fn test_resolve_path_vars_mixed() {
-        let resolved = resolve_path_vars("$EXE_DIR/$HOME/data");
-        assert!(resolved.to_string_lossy().contains("data"));
-        assert!(!resolved.to_string_lossy().contains("$EXE_DIR"));
-        assert!(!resolved.to_string_lossy().contains("$HOME"));
-    }
-
-    #[test]
-    fn test_config_file_with_vars() {
-        let toml_str = r#"
-[paths]
-data_dir = "$EXE_DIR/data"
-"#;
-        let cfg: ConfigFile = toml::from_str(toml_str).unwrap();
-        let data_dir_str = cfg.paths.unwrap().data_dir.unwrap();
-        let resolved = resolve_path_vars(&data_dir_str);
-        assert_eq!(resolved, exe_dir().join("data"));
     }
 }

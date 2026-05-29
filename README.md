@@ -58,6 +58,11 @@ rs-histver info -c nightly
 |--------|-------------|
 | `-h, --help` | Show help |
 | `-V, --version` | Show version |
+| `--data-dir <PATH>` | Data directory for database files |
+| `--db-file <NAME>` | Database filename (enables shared mode) |
+| `--table-prefix <PREFIX>` | Prefix for database table names (default: `rs_histver`) |
+| `--timeout <SECONDS>` | HTTP request timeout (default: `15`) |
+| `--max-concurrency <N>` | Maximum concurrent HTTP requests (default: `10`) |
 
 ### `sync` — Sync release data
 
@@ -150,7 +155,7 @@ Creates a dedicated `rs-histver.redb` file. This is the default behavior and req
 - Using `Config::new()` — default configuration
 - Using `Config::with_db_path(path)` — custom path, always standalone
 - Using `ConfigBuilder` without `db_file()` — even with custom `data_dir()`
-- config.toml without `[rs-histver.database].db_file`
+- CLI without `--db-file` argument
 
 #### Shared Mode
 
@@ -158,7 +163,7 @@ Opens the host project's existing redb database file, using `table_prefix` to av
 
 **Triggered when:**
 - `db_file` is set via `ConfigBuilder::db_file()` method
-- config.toml contains `[rs-histver.database].db_file` field
+- CLI with `--db-file` argument
 
 **Important:** When `db_file` is set but `table_prefix` remains at its default value (`rs_histver`), a warning is printed to stderr to prevent potential table name collisions with other applications using the same database.
 
@@ -172,35 +177,6 @@ Shared mode includes intelligent error recovery:
 | Database format version incompatible (`UpgradeRequired`) | Deletes old file and recreates (standalone mode) |
 | Database file corrupted (`StorageError::Corrupted`) | Falls back to standalone mode |
 | Table does not exist during read | Returns empty result (not an error) |
-
-### Configuration via config.toml
-
-When embedded in a host project, the database path can be read from the host's `config.toml`:
-
-```toml
-[paths]
-# Supported variable substitution:
-#   $EXE_DIR  — executable directory
-#   $HOME     — user home directory
-#   ~/        — user home directory (shorthand)
-data_dir = "$EXE_DIR/data"
-
-[rs-histver.database]
-db_file = "myapp.redb"                # shared: open host's redb file
-table_prefix = "myapp_histver"        # table names: myapp_histver_stable/beta/nightly
-
-[rs-histver.network]
-timeout = 30                           # optional, default: 15 (seconds)
-max_concurrency = 5                    # optional, default: 10
-```
-
-- **Without `db_file`**: standalone mode — creates `<data_dir>/rs-histver.redb`
-- **With `db_file`**: shared mode — opens the host's redb file, uses `table_prefix` to avoid collisions
-- If `db_file` points to a non-redb file, it automatically falls back to standalone mode
-
-See [Library Usage — Embedded in Host Project](#embedded-in-host-project) for code examples.
-
-> **Note:** If upgrading from v0.1.x, the database format has changed. The old database will be automatically recreated on first run.
 
 ## Project Structure
 
@@ -272,7 +248,7 @@ async fn main() -> anyhow::Result<()> {
 
 #### Embedded in Host Project
 
-When embedded in a host project (e.g. Tauri app), the database path should be determined by the host's configuration. Use `ConfigBuilder` or `Config::from_config_file()` to achieve this.
+When embedded in a host project (e.g. Tauri app), the database path should be determined by the host. Use `ConfigBuilder` to pass configuration programmatically.
 
 **Standalone mode (default):**
 
@@ -293,13 +269,7 @@ let hv = HistVer::new(
 When the host project also uses redb, you can share the same database file. Configure `db_file` to point to the host's redb file, and `table_prefix` to avoid table name collisions.
 
 ```rust
-use rs_histver::{HistVer, Config};
-
-// From config file
-let hv = HistVer::new(Config::from_config_file("config.toml")?)?;
-
-// Or programmatically
-use rs_histver::ConfigBuilder;
+use rs_histver::{HistVer, ConfigBuilder};
 
 let hv = HistVer::new(
     ConfigBuilder::new()
@@ -315,24 +285,13 @@ If `db_file` points to a non-redb file, it automatically falls back to standalon
 **Priority order:**
 
 ```
-Programmatic override (highest) → config.toml → hardcoded defaults (lowest)
+Programmatic override (highest) → hardcoded defaults (lowest)
 ```
 
 - `db_path()` overrides everything (complete file path, always standalone mode)
 - `db_file()` enables shared mode, combined with `data_dir()`
 - `data_dir()` alone → standalone mode: `<data_dir>/rs-histver.redb`
-- `table_prefix()` / `timeout()` / `max_concurrency()` override config.toml values
-- Missing config file or fields fall back to defaults silently
-
-**Variable substitution in config.toml:**
-
-| Variable | Resolves to | Example (Windows) |
-|----------|-------------|-------------------|
-| `$EXE_DIR` | Executable directory | `C:\Program Files\MyApp` |
-| `$HOME` | User home (`%USERPROFILE%` / `$HOME`) | `C:\Users\user` |
-| `~/` | User home (same as `$HOME`) | `~/data` → `C:\Users\user\data` |
-
-Variable substitution only applies to paths read from config.toml. Programmatic `data_dir()` / `db_path()` accept resolved `PathBuf` values.
+- `table_prefix()` / `timeout()` / `max_concurrency()` override defaults
 
 ## Design Patterns
 

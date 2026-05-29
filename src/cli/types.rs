@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
 
 /// Rust release channel.
 ///
@@ -26,6 +27,26 @@ impl std::fmt::Display for Channel {
 #[command(about = "Query Rust historical release versions")]
 #[command(version)]
 pub struct Cli {
+    /// Data directory for database files
+    #[arg(long, global = true)]
+    pub data_dir: Option<PathBuf>,
+
+    /// Database filename (enables shared mode when set)
+    #[arg(long, global = true)]
+    pub db_file: Option<String>,
+
+    /// Prefix for database table names (default: rs_histver)
+    #[arg(long, global = true)]
+    pub table_prefix: Option<String>,
+
+    /// HTTP request timeout in seconds (default: 15)
+    #[arg(long, global = true)]
+    pub timeout: Option<u64>,
+
+    /// Maximum concurrent HTTP requests (default: 10)
+    #[arg(long, global = true)]
+    pub max_concurrency: Option<usize>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
