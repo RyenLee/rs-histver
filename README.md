@@ -6,6 +6,15 @@
 
 A CLI tool and library for querying Rust historical release versions with local redb cache. Supports stable, beta, and nightly channels.
 
+## Features
+
+- **Three release channels**: stable, beta, and nightly
+- **Local redb cache**: fast offline queries after initial sync
+- **Per-channel tables**: efficient filtering by release channel
+- **Shared database mode**: integrate with host project's redb database
+- **CLI and library**: use as standalone tool or embed in your project
+- **Zero config needed**: sensible defaults, no config file required
+
 ## Installation
 
 ```bash
@@ -216,7 +225,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rs-histver = "0.2.1"
+rs-histver = "0.2.2"
 ```
 
 #### Standalone Usage
