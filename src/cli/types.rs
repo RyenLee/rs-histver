@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 
-use crate::constants::{CHANNEL_BETA, CHANNEL_NIGHTLY, CHANNEL_STABLE, DEFAULT_PROBE_DAYS};
+use crate::constants::{
+    CHANNEL_BETA, CHANNEL_NIGHTLY, CHANNEL_STABLE, DEFAULT_PROBE_DAYS, DEFAULT_TIMEOUT_SECS,
+};
 
 /// CLI entry for rs-histver.
 ///
@@ -37,12 +39,19 @@ pub enum Commands {
         channel: Channel,
 
         /// Use RELEASES.md full history data source (stable only).
-        #[arg(long, help = "Use RELEASES.md full history instead of GitHub API (stable only)")]
+        #[arg(
+            long,
+            help = "Use RELEASES.md full history instead of GitHub API (stable only)"
+        )]
         full: bool,
 
         /// Probe recent N days of history (beta/nightly).
         #[arg(short = 'd', long = "days", default_value_t = DEFAULT_PROBE_DAYS, help = "Days to probe (beta/nightly)")]
         days: u32,
+
+        /// HTTP request timeout in seconds.
+        #[arg(short = 't', long = "timeout", default_value_t = DEFAULT_TIMEOUT_SECS, help = "HTTP request timeout in seconds")]
+        timeout: u64,
     },
 }
 

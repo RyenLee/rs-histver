@@ -21,16 +21,18 @@ impl App {
                 channel,
                 full,
                 days,
-            } => Self::handle_fetch(&channel.to_string(), full, days).await,
+                timeout,
+            } => Self::handle_fetch(&channel.to_string(), full, days, timeout).await,
         }
     }
 
-    async fn handle_fetch(channel: &str, full: bool, days: u32) -> Result<()> {
+    async fn handle_fetch(channel: &str, full: bool, days: u32, timeout: u64) -> Result<()> {
         println!("Fetching Rust {} release data from remote...", channel);
 
         let opts = FetchOptions::new()
             .full_history(full)
-            .probe_days(days);
+            .probe_days(days)
+            .timeout(std::time::Duration::from_secs(timeout));
         let releases = crate::fetch_releases(channel, opts).await?;
 
         if releases.is_empty() {

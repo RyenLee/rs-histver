@@ -128,7 +128,7 @@ async fn fetch_from_releases_md(network: &NetworkConfig) -> Result<Vec<RustRelea
         .get(RELEASES_MD_URL)
         .send()
         .await
-        .context("Failed to request RELEASES.md")?
+        .context("Failed to request RELEASES.md. This may be due to slow network connectivity or firewall restrictions.\nHint: Try increasing the timeout with --timeout <seconds> or use the default GitHub API mode without --full")?
         .text()
         .await
         .context("Failed to read RELEASES.md content")?;

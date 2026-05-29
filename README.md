@@ -590,6 +590,18 @@ cargo publish
 
 ## Changelog
 
+### 0.4.2
+
+- **Bug Fix**: Replaced `rustls` with `native-tls` for TLS implementation
+- **Improvement**: Use Windows SChannel / macOS SecureTransport for better network compatibility
+- **Bug Fix**: Added `system-proxy` support to respect system proxy settings
+
+### 0.4.1
+
+- **Bug Fix**: Increased default HTTP timeout from 15s to 60s for better network compatibility
+- **New Feature**: Added `--timeout` / `-t` CLI parameter to customize HTTP request timeout
+- **Improvement**: Enhanced error message for RELEASES.md fetch failures to hint at network issues
+
 ### 0.4.0
 
 - **Breaking Change**: Removed database and config file dependencies

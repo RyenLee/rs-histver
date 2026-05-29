@@ -22,7 +22,9 @@ pub const ALL_CHANNELS: &[&str] = &[CHANNEL_STABLE, CHANNEL_BETA, CHANNEL_NIGHTL
 pub const DEFAULT_PROBE_DAYS: u32 = 30;
 
 /// Default HTTP request timeout (seconds).
-pub const DEFAULT_TIMEOUT_SECS: u64 = 15;
+/// Increased from 15s to 60s for better compatibility with slow network connections
+/// (e.g., accessing GitHub from regions like China mainland).
+pub const DEFAULT_TIMEOUT_SECS: u64 = 60;
 
 /// Default maximum number of concurrent HTTP requests.
 pub const DEFAULT_MAX_CONCURRENCY: usize = 10;
