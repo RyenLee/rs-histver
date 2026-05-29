@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use crate::domain::RustRelease;
-use crate::infra::Config;
+use crate::options::NetworkConfig;
 
 use super::http::probe_channel_history;
 use super::ReleaseFetcher;
@@ -31,8 +31,8 @@ impl ReleaseFetcher for NightlyFetcher {
         "Channel TOML date probing"
     }
 
-    async fn fetch(&self, config: &Config) -> Result<Vec<RustRelease>> {
-        let releases = probe_channel_history(config, "nightly", self.days).await;
+    async fn fetch(&self, network: &NetworkConfig) -> Result<Vec<RustRelease>> {
+        let releases = probe_channel_history(network, "nightly", self.days).await;
         if releases.is_empty() {
             anyhow::bail!("No nightly release data found");
         }

@@ -4,18 +4,74 @@
 [![Documentation](https://docs.rs/rs-histver/badge.svg)](https://docs.rs/rs-histver)
 [![License](https://img.shields.io/crates/l/rs-histver.svg)](https://github.com/RyenLee/rs-histver#license)
 
-A CLI tool and library for querying Rust historical release versions with local redb cache. Supports stable, beta, and nightly channels.
+A library for querying Rust historical release versions (stable / beta / nightly) via the GitHub Releases API and rust-lang.org distribution server.
 
-## Features
+**As a library**: one function call, pure in-memory result, zero file-system side effects.
+**As a CLI binary**: local redb cache for offline queries, full terminal UI.
 
-- **Three release channels**: stable, beta, and nightly
-- **Local redb cache**: fast offline queries after initial sync
-- **Per-channel tables**: efficient filtering by release channel
-- **Shared database mode**: integrate with host project's redb database
-- **CLI and library**: use as standalone tool or embed in your project
-- **Zero config needed**: sensible defaults, no config file required
+## Library vs CLI
 
-## Installation
+```toml
+# Library only — no redb / clap dependency
+rs-histver = "0.3"
+
+# Library + CLI binary
+rs-histver = { version = "0.3", features = ["cli"] }
+```
+
+### Usage as a Library
+
+```rust
+use rs_histver::{fetch_releases, FetchOptions};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Stable releases via GitHub API (default: 30-day history)
+    let releases = fetch_releases("stable", FetchOptions::default()).await?;
+
+    // Full history from RELEASES.md
+    let all = fetch_releases("stable", FetchOptions::new().full_history(true)).await?;
+
+    // Recent 7 days of nightly builds
+    let recent = fetch_releases("nightly", FetchOptions::new().probe_days(7)).await?;
+
+    for r in &releases {
+        println!("{} ({}) [{}]", r.version, r.date, r.channel);
+    }
+    Ok(())
+}
+```
+
+#### `FetchOptions` — all fields are optional
+
+| Method | Default | Description |
+|--------|---------|-------------|
+| `full_history(bool)` | `false` | Stable: use RELEASES.md instead of GitHub API |
+| `probe_days(u32)` | `30` | Beta/nightly: how many recent days to probe |
+| `timeout(Duration)` | `15s` | HTTP request timeout |
+| `max_concurrency(usize)` | `10` | Maximum concurrent HTTP requests |
+| `user_agent(string)` | `rs-histver/{ver}` | HTTP User-Agent header |
+
+#### Library API
+
+| Item | Type | Description |
+|------|------|-------------|
+| `fetch_releases(channel, opts)` | `async fn` | Fetch `Vec<RustRelease>` from remote |
+| `FetchOptions` | `struct` | Query configuration |
+| `RustRelease` | `struct` | `{ version, date, channel }` |
+| `create_fetcher(channel, full, days)` | `fn` | Low-level: create a typed fetcher |
+| `ReleaseFetcher` | `trait` | Strategy trait; implement to extend |
+
+```rust
+// Low-level API — use create_fetcher + ReleaseFetcher trait directly
+use rs_histver::{create_fetcher, ReleaseFetcher, NetworkConfig};
+
+let fetcher = create_fetcher("stable", false, 30)?;
+let network = NetworkConfig { timeout: 15, max_concurrency: 10, user_agent: "my-app/1.0".into() };
+let releases = fetcher.fetch(&network).await?;
+```
+
+## CLI Installation
 
 ```bash
 cargo install rs-histver
@@ -26,10 +82,10 @@ Or build from source:
 ```bash
 git clone https://github.com/RyenLee/rs-histver.git
 cd rs-histver
-cargo build --release
+cargo build --release --features cli
 ```
 
-## Quick Start
+## CLI Quick Start
 
 ```bash
 # Sync stable releases to local cache
@@ -47,265 +103,65 @@ rs-histver sync -c beta --days 14
 # List cached releases
 rs-histver list
 
-# List nightly releases
-rs-histver list -c nightly
-
 # Search releases
 rs-histver search "1.75"
-rs-histver search "2024-06" -c stable
 
 # Show cache statistics
 rs-histver info
-rs-histver info -c nightly
 ```
 
-## Commands
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `sync [-c CHANNEL] [--full] [-d DAYS]` | Fetch remote data and cache locally |
+| `list [-c CHANNEL] [-n LIMIT]` | List cached releases |
+| `search <KEYWORD> [-c CHANNEL]` | Fuzzy search by version or date |
+| `info [-c CHANNEL]` | Show cache entry counts |
 
 ### Global Options
 
 | Option | Description |
 |--------|-------------|
-| `-h, --help` | Show help |
-| `-V, --version` | Show version |
 | `--data-dir <PATH>` | Data directory for database files |
-| `--db-file <NAME>` | Database filename (enables shared mode) |
-| `--table-prefix <PREFIX>` | Prefix for database table names (default: `rs_histver`) |
-| `--timeout <SECONDS>` | HTTP request timeout (default: `15`) |
-| `--max-concurrency <N>` | Maximum concurrent HTTP requests (default: `10`) |
+| `--db-file <NAME>` | Database filename |
+| `--table-prefix <PREFIX>` | Table name prefix (default: `rs_histver`) |
+| `--timeout <SECONDS>` | HTTP timeout (default: `15`) |
+| `--max-concurrency <N>` | Max concurrent requests (default: `10`) |
 
-### `sync` — Sync release data
-
-Fetch release information from remote and cache to local redb database.
-
-```bash
-rs-histver sync [OPTIONS]
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-c, --channel <CHANNEL>` | `stable` | Channel: `stable` / `beta` / `nightly` |
-| `--full` | — | Use RELEASES.md data source (stable only, full history) |
-| `-d, --days <DAYS>` | `30` | Probe recent N days of history (beta/nightly only) |
-
-**Data sources:**
+## Data Sources
 
 | Channel | Default source | `--full` source |
-|---------|---------------|-----------------|
+|---------|---------------|----------------|
 | stable | GitHub Releases API | RELEASES.md (full history) |
-| beta | `dist/YYYY-MM-DD/channel-rust-beta.toml` date probing | — |
-| nightly | `dist/YYYY-MM-DD/channel-rust-nightly.toml` date probing | — |
+| beta | `dist/{date}/channel-rust-beta.toml` probing | — |
+| nightly | `dist/{date}/channel-rust-nightly.toml` probing | — |
 
-### `list` — List cached releases
+## Database (CLI only)
 
-```bash
-rs-histver list [OPTIONS]
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-n, --limit <N>` | `20` | Maximum entries to display |
-| `-c, --channel <CHANNEL>` | all | Filter by channel |
-
-### `search` — Search releases
-
-Fuzzy match by version number or date.
-
-```bash
-rs-histver search <KEYWORD> [OPTIONS]
-```
-
-| Argument/Option | Description |
-|-----------------|-------------|
-| `<KEYWORD>` | Search keyword, e.g. `1.75` or `2024-06` |
-| `-c, --channel <CHANNEL>` | Filter by channel |
-
-### `info` — Cache statistics
-
-```bash
-rs-histver info [OPTIONS]
-```
-
-| Option | Description |
-|--------|-------------|
-| `-c, --channel <CHANNEL>` | Filter by channel |
-
-## Database
-
-The local cache uses [redb](https://github.com/cberner/redb) with per-channel tables for efficient filtering:
-
-- `rs_histver_stable` — key: date, value: version
-- `rs_histver_beta` — key: date, value: version
-- `rs_histver_nightly` — key: date, value: version
-
-### Default path
-
-Database file is automatically created at:
+The CLI caches data in [redb](https://github.com/cberner/redb):
 
 ```
 <executable_directory>/data/rs-histver.redb
 ```
 
-No configuration file is needed. The `data/` directory is created automatically on first use.
+Three per-channel tables (`{prefix}_stable`, `{prefix}_beta`, `{prefix}_nightly`) store
+key-value pairs where key = date and value = version string.
 
-### Database Modes
+### Database Modes (CLI)
 
-rs-histver supports two database modes, determined by the `shared` flag in [`DatabaseConfig`](https://docs.rs/rs-histver/latest/rs_histver/struct.DatabaseConfig.html):
+| Mode | Trigger | File |
+|------|---------|------|
+| **Standalone** (default) | No `--db-file` | `<data_dir>/rs-histver.redb` |
+| **Shared** | `--db-file` set | `<data_dir>/<db_file>` |
 
-| Mode | `shared` | Trigger Condition | Database File | Table Prefix |
-|------|----------|-------------------|---------------|--------------|
-| **Standalone** (default) | `false` | No `db_file` configured | `<data_dir>/rs-histver.redb` | `rs_histver` |
-| **Shared** | `true` | `db_file` is set | `<data_dir>/<db_file>` | Custom (recommended) |
-
-#### Standalone Mode
-
-Creates a dedicated `rs-histver.redb` file. This is the default behavior and requires no special configuration.
-
-**Triggered when:**
-- Using `Config::new()` — default configuration
-- Using `Config::with_db_path(path)` — custom path, always standalone
-- Using `ConfigBuilder` without `db_file()` — even with custom `data_dir()`
-- CLI without `--db-file` argument
-
-#### Shared Mode
-
-Opens the host project's existing redb database file, using `table_prefix` to avoid table name collisions.
-
-**Triggered when:**
-- `db_file` is set via `ConfigBuilder::db_file()` method
-- CLI with `--db-file` argument
-
-**Important:** When `db_file` is set but `table_prefix` remains at its default value (`rs_histver`), a warning is printed to stderr to prevent potential table name collisions with other applications using the same database.
-
-### Automatic Fallback Behavior
-
-Shared mode includes intelligent error recovery:
-
-| Scenario | Behavior |
-|----------|----------|
-| Target file is not a valid redb database | Falls back to standalone mode, creates `rs-histver.redb` in same directory |
-| Database format version incompatible (`UpgradeRequired`) | Deletes old file and recreates (standalone mode) |
-| Database file corrupted (`StorageError::Corrupted`) | Falls back to standalone mode |
-| Table does not exist during read | Returns empty result (not an error) |
-
-## Project Structure
-
-```
-src/
-├── lib.rs               # Library entry point (HistVer, Config, public API)
-├── main.rs              # CLI entry point
-├── cli.rs               # CLI module root
-│   └── cli/
-│       └── types.rs     # Channel enum, Cli, Commands definitions
-├── domain.rs             # Domain module root
-│   └── domain/
-│       └── release.rs   # RustRelease data model
-├── infra.rs              # Infrastructure module root
-│   ├── infra/
-│   │   ├── config.rs    # Configuration (Config, DatabaseConfig, NetworkConfig)
-│   │   ├── database.rs  # Database access layer (Db, redb)
-│   │   └── fetcher.rs   # ReleaseFetcher trait + create_fetcher factory
-│   └── infra/fetcher/
-│       ├── http.rs      # Shared HTTP client & TOML utilities
-│       ├── stable.rs    # StableFetcher (GitHub API / RELEASES.md)
-│       ├── beta.rs      # BetaFetcher (channel TOML probing)
-│       └── nightly.rs   # NightlyFetcher (channel TOML probing)
-└── app.rs                # Application module root
-    └── app/
-        ├── handler.rs   # App struct + business logic
-        └── display.rs   # Table formatting utilities
-```
-
-## API Documentation
-
-Full API documentation is available on [docs.rs](https://docs.rs/rs-histver).
-
-### Usage as a Library
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-rs-histver = "0.2.2"
-```
-
-#### Standalone Usage
-
-```rust
-use rs_histver::{HistVer, Config};
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Default: database at <exe_dir>/data/rs-histver.redb
-    let hv = HistVer::new(Config::new())?;
-
-    // Or: custom database path
-    // let hv = HistVer::new(Config::with_db_path("/path/to/my-cache.redb"))?;
-
-    // Fetch and cache releases
-    let releases = hv.fetch_releases("stable", false, 30).await?;
-    hv.store_releases(&releases)?;
-
-    // Query local cache
-    let all = hv.list_releases(None)?;
-    let stable = hv.list_releases(Some("stable"))?;
-    let results = hv.search_releases("1.75", None)?;
-    let count = hv.count_releases(None)?;
-
-    Ok(())
-}
-```
-
-#### Embedded in Host Project
-
-When embedded in a host project (e.g. Tauri app), the database path should be determined by the host. Use `ConfigBuilder` to pass configuration programmatically.
-
-**Standalone mode (default):**
-
-Creates a dedicated `rs-histver.redb` file in `data_dir`.
-
-```rust
-use rs_histver::{HistVer, ConfigBuilder};
-
-let hv = HistVer::new(
-    ConfigBuilder::new()
-        .data_dir(app_data_dir)          // creates <data_dir>/rs-histver.redb
-        .build()?
-)?;
-```
-
-**Shared mode (host uses redb):**
-
-When the host project also uses redb, you can share the same database file. Configure `db_file` to point to the host's redb file, and `table_prefix` to avoid table name collisions.
-
-```rust
-use rs_histver::{HistVer, ConfigBuilder};
-
-let hv = HistVer::new(
-    ConfigBuilder::new()
-        .data_dir(app_data_dir)
-        .db_file("myapp.redb")          // shared mode
-        .table_prefix("myapp_histver")
-        .build()?
-)?;
-```
-
-If `db_file` points to a non-redb file, it automatically falls back to standalone mode (creates `rs-histver.redb` in the same directory).
-
-**Priority order:**
-
-```
-Programmatic override (highest) → hardcoded defaults (lowest)
-```
-
-- `db_path()` overrides everything (complete file path, always standalone mode)
-- `db_file()` enables shared mode, combined with `data_dir()`
-- `data_dir()` alone → standalone mode: `<data_dir>/rs-histver.redb`
-- `table_prefix()` / `timeout()` / `max_concurrency()` override defaults
+When `db_file` points to a non-redb file or the file is locked by another process,
+the CLI automatically falls back to standalone mode.
 
 ## Design Patterns
 
 - **Strategy Pattern**: `ReleaseFetcher` trait — each channel implements its own fetch logic
-- **Factory Method**: `create_fetcher()` — creates the appropriate fetcher based on channel name
+- **Factory Method**: `create_fetcher()` — creates the appropriate fetcher by channel name
 
 ## License
 

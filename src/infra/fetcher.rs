@@ -4,7 +4,7 @@ mod nightly;
 mod stable;
 
 use crate::domain::RustRelease;
-use crate::infra::Config;
+use crate::options::NetworkConfig;
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -19,7 +19,7 @@ pub trait ReleaseFetcher: Send + Sync {
     /// Human-readable description of the data source being used.
     fn source_description(&self) -> &str;
     /// Fetch release data from the remote source.
-    async fn fetch(&self, config: &Config) -> Result<Vec<RustRelease>>;
+    async fn fetch(&self, network: &NetworkConfig) -> Result<Vec<RustRelease>>;
 }
 
 /// Factory function: create the appropriate fetcher for a given channel.

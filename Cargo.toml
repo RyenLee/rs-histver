@@ -1,17 +1,17 @@
 [package]
 name = "rs-histver"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.75"
-description = "A CLI tool and library for querying Rust historical release versions with local redb cache"
+description = "Library for querying Rust historical release versions (stable/beta/nightly)"
 authors = ["RyenLee"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/RyenLee/rs-histver"
 homepage = "https://github.com/RyenLee/rs-histver"
 documentation = "https://docs.rs/rs-histver"
 readme = "README.md"
-keywords = ["rust", "versions", "cli", "release", "redb"]
-categories = ["command-line-utilities", "development-tools", "caching"]
+keywords = ["rust", "versions", "release", "stable", "nightly"]
+categories = ["development-tools"]
 include = [
     "src/**/*",
     "README.md",
@@ -26,17 +26,23 @@ path = "src/lib.rs"
 [[bin]]
 name = "rs-histver"
 path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = []
+cli = ["redb", "clap", "comfy-table", "toml"]
 
 [dependencies]
-redb = "4"
 reqwest = { version = "0.13", features = ["json", "rustls"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-comfy-table = "7"
 regex-lite = "0.1"
 async-trait = "0.1"
-toml = "1"
+
+redb = { version = "4", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+comfy-table = { version = "7", optional = true }
+toml = { version = "1", optional = true }

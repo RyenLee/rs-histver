@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
 use crate::domain::RustRelease;
-use crate::infra::Config;
+use crate::options::NetworkConfig;
 
 const DATE_CHANNEL_TOML: &str = "https://static.rust-lang.org/dist";
 
@@ -19,19 +19,19 @@ fn date_regex() -> &'static regex_lite::Regex {
 }
 
 /// Build an HTTP client
-pub(super) fn build_client(config: &Config) -> Result<reqwest::Client> {
+pub(super) fn build_client(network: &NetworkConfig) -> Result<reqwest::Client> {
     reqwest::Client::builder()
-        .user_agent(&config.network.user_agent)
-        .timeout(std::time::Duration::from_secs(config.network.timeout))
+        .user_agent(&network.user_agent)
+        .timeout(std::time::Duration::from_secs(network.timeout))
         .build()
         .context("Failed to build HTTP client")
 }
 
 /// Build an HTTP client with fallback to a default one on error
-pub(super) fn build_client_fallback(config: &Config) -> reqwest::Client {
-    build_client(config).unwrap_or_else(|_| {
+pub(super) fn build_client_fallback(network: &NetworkConfig) -> reqwest::Client {
+    build_client(network).unwrap_or_else(|_| {
         reqwest::Client::builder()
-            .user_agent(&config.network.user_agent)
+            .user_agent(&network.user_agent)
             .build()
             .expect("reqwest default client builder should never fail")
     })
@@ -39,12 +39,12 @@ pub(super) fn build_client_fallback(config: &Config) -> reqwest::Client {
 
 /// Concurrently probe channel TOML for the recent N days (including today)
 pub(super) async fn probe_channel_history(
-    config: &Config,
+    network: &NetworkConfig,
     channel: &str,
     days: u32,
 ) -> Vec<RustRelease> {
-    let client = Arc::new(build_client_fallback(config));
-    let semaphore = Arc::new(Semaphore::new(config.network.max_concurrency));
+    let client = Arc::new(build_client_fallback(network));
+    let semaphore = Arc::new(Semaphore::new(network.max_concurrency));
     let today = chrono::Local::now().date_naive();
 
     let mut handles = Vec::new();

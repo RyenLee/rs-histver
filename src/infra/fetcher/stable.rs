@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::sync::OnceLock;
 
 use crate::domain::RustRelease;
-use crate::infra::Config;
+use crate::options::NetworkConfig;
 
 use super::http::build_client;
 use super::ReleaseFetcher;
@@ -58,17 +58,17 @@ impl ReleaseFetcher for StableFetcher {
         }
     }
 
-    async fn fetch(&self, config: &Config) -> Result<Vec<RustRelease>> {
+    async fn fetch(&self, network: &NetworkConfig) -> Result<Vec<RustRelease>> {
         if self.full {
-            fetch_from_releases_md(config).await
+            fetch_from_releases_md(network).await
         } else {
-            fetch_from_github(config).await
+            fetch_from_github(network).await
         }
     }
 }
 
-async fn fetch_from_github(config: &Config) -> Result<Vec<RustRelease>> {
-    let client = build_client(config)?;
+async fn fetch_from_github(network: &NetworkConfig) -> Result<Vec<RustRelease>> {
+    let client = build_client(network)?;
     let mut all = Vec::new();
     let mut page = 1u32;
 
@@ -123,8 +123,8 @@ async fn fetch_from_github(config: &Config) -> Result<Vec<RustRelease>> {
     Ok(all)
 }
 
-async fn fetch_from_releases_md(config: &Config) -> Result<Vec<RustRelease>> {
-    let text = build_client(config)?
+async fn fetch_from_releases_md(network: &NetworkConfig) -> Result<Vec<RustRelease>> {
+    let text = build_client(network)?
         .get(RELEASES_MD_URL)
         .send()
         .await

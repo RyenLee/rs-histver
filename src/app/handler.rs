@@ -4,6 +4,7 @@ use crate::cli::Commands;
 use crate::infra::fetcher;
 use crate::infra::Config;
 use crate::infra::Db;
+use crate::options::NetworkConfig;
 
 use super::display::print_releases_table;
 
@@ -56,7 +57,12 @@ impl App {
         );
         println!("Data source: {}", fetcher.source_description());
 
-        let releases = fetcher.fetch(&self.config).await?;
+        let network = NetworkConfig {
+            timeout: self.config.network.timeout,
+            max_concurrency: self.config.network.max_concurrency,
+            user_agent: self.config.network.user_agent.clone(),
+        };
+        let releases = fetcher.fetch(&network).await?;
 
         if releases.is_empty() {
             println!("No release data found");
