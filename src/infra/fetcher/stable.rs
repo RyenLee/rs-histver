@@ -17,7 +17,8 @@ static RELEASES_MD_RE: OnceLock<regex_lite::Regex> = OnceLock::new();
 
 fn releases_md_regex() -> &'static regex_lite::Regex {
     RELEASES_MD_RE.get_or_init(|| {
-        regex_lite::Regex::new(r"Version\s+(\d+\.\d+\.\d+)\s+\((\d{4}-\d{2}-\d{2})\)").unwrap()
+        regex_lite::Regex::new(r"Version\s+(\d+\.\d+\.\d+)\s+\((\d{4}-\d{2}-\d{2})\)")
+            .expect("RELEASES_MD_RE regex pattern is statically valid")
     })
 }
 

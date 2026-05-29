@@ -12,7 +12,10 @@ const DATE_CHANNEL_TOML: &str = "https://static.rust-lang.org/dist";
 static DATE_RE: OnceLock<regex_lite::Regex> = OnceLock::new();
 
 fn date_regex() -> &'static regex_lite::Regex {
-    DATE_RE.get_or_init(|| regex_lite::Regex::new(r"(\d{4}-\d{2}-\d{2})").unwrap())
+    DATE_RE.get_or_init(|| {
+        regex_lite::Regex::new(r"(\d{4}-\d{2}-\d{2})")
+            .expect("DATE_RE regex pattern is statically valid")
+    })
 }
 
 /// Build an HTTP client
@@ -30,7 +33,7 @@ pub(super) fn build_client_fallback(config: &Config) -> reqwest::Client {
         reqwest::Client::builder()
             .user_agent(&config.network.user_agent)
             .build()
-            .unwrap()
+            .expect("reqwest default client builder should never fail")
     })
 }
 
@@ -54,10 +57,11 @@ pub(super) async fn probe_channel_history(
         let channel = channel.to_string();
 
         handles.push(tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
-            let url = format!(
-                "{DATE_CHANNEL_TOML}/{date_str}/channel-rust-{channel}.toml"
-            );
+            let _permit = sem
+                .acquire()
+                .await
+                .expect("Semaphore is never closed during probe");
+            let url = format!("{DATE_CHANNEL_TOML}/{date_str}/channel-rust-{channel}.toml");
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => match resp.text().await {
                     Ok(text) => parse_channel_toml_version(&text, &channel, &date_str),
@@ -69,10 +73,21 @@ pub(super) async fn probe_channel_history(
     }
 
     let mut results = Vec::new();
+    let mut task_errors = 0u32;
     for handle in handles {
-        if let Ok(Some(r)) = handle.await {
-            results.push(r);
+        match handle.await {
+            Ok(Some(r)) => results.push(r),
+            Ok(None) => {}
+            Err(_) => task_errors += 1,
         }
+    }
+
+    if task_errors > 0 {
+        eprintln!(
+            "Warning: {}/{} probe tasks failed (panicked or were cancelled). \
+             Results may be incomplete.",
+            task_errors, days
+        );
     }
 
     results.sort_by(|a, b| b.date.cmp(&a.date));
@@ -96,7 +111,8 @@ fn parse_channel_toml_version(
     let version_str = &rest[..end];
 
     let date = date_regex()
-        .captures(version_str).map_or_else(|| fallback_date.to_string(), |c| c[1].to_string());
+        .captures(version_str)
+        .map_or_else(|| fallback_date.to_string(), |c| c[1].to_string());
 
     Some(RustRelease {
         version: version_str.to_string(),

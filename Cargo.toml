@@ -1,6 +1,6 @@
 [package]
 name = "rs-histver"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.75"
 description = "A CLI tool and library for querying Rust historical release versions with local redb cache"
@@ -28,8 +28,8 @@ name = "rs-histver"
 path = "src/main.rs"
 
 [dependencies]
-redb = "4.1.0"
-reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+redb = "4"
+reqwest = { version = "0.13", features = ["json", "rustls"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -39,3 +39,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 comfy-table = "7"
 regex-lite = "0.1"
 async-trait = "0.1"
+toml = "1"

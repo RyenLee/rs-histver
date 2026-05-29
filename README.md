@@ -123,6 +123,8 @@ The local cache uses [redb](https://github.com/cberner/redb) with per-channel ta
 - `rs_histver_beta` — key: date, value: version
 - `rs_histver_nightly` — key: date, value: version
 
+### Default path
+
 Database file is automatically created at:
 
 ```
@@ -130,6 +132,73 @@ Database file is automatically created at:
 ```
 
 No configuration file is needed. The `data/` directory is created automatically on first use.
+
+### Database Modes
+
+rs-histver supports two database modes, determined by the `shared` flag in [`DatabaseConfig`](https://docs.rs/rs-histver/latest/rs_histver/struct.DatabaseConfig.html):
+
+| Mode | `shared` | Trigger Condition | Database File | Table Prefix |
+|------|----------|-------------------|---------------|--------------|
+| **Standalone** (default) | `false` | No `db_file` configured | `<data_dir>/rs-histver.redb` | `rs_histver` |
+| **Shared** | `true` | `db_file` is set | `<data_dir>/<db_file>` | Custom (recommended) |
+
+#### Standalone Mode
+
+Creates a dedicated `rs-histver.redb` file. This is the default behavior and requires no special configuration.
+
+**Triggered when:**
+- Using `Config::new()` — default configuration
+- Using `Config::with_db_path(path)` — custom path, always standalone
+- Using `ConfigBuilder` without `db_file()` — even with custom `data_dir()`
+- config.toml without `[rs-histver.database].db_file`
+
+#### Shared Mode
+
+Opens the host project's existing redb database file, using `table_prefix` to avoid table name collisions.
+
+**Triggered when:**
+- `db_file` is set via `ConfigBuilder::db_file()` method
+- config.toml contains `[rs-histver.database].db_file` field
+
+**Important:** When `db_file` is set but `table_prefix` remains at its default value (`rs_histver`), a warning is printed to stderr to prevent potential table name collisions with other applications using the same database.
+
+### Automatic Fallback Behavior
+
+Shared mode includes intelligent error recovery:
+
+| Scenario | Behavior |
+|----------|----------|
+| Target file is not a valid redb database | Falls back to standalone mode, creates `rs-histver.redb` in same directory |
+| Database format version incompatible (`UpgradeRequired`) | Deletes old file and recreates (standalone mode) |
+| Database file corrupted (`StorageError::Corrupted`) | Falls back to standalone mode |
+| Table does not exist during read | Returns empty result (not an error) |
+
+### Configuration via config.toml
+
+When embedded in a host project, the database path can be read from the host's `config.toml`:
+
+```toml
+[paths]
+# Supported variable substitution:
+#   $EXE_DIR  — executable directory
+#   $HOME     — user home directory
+#   ~/        — user home directory (shorthand)
+data_dir = "$EXE_DIR/data"
+
+[rs-histver.database]
+db_file = "myapp.redb"                # shared: open host's redb file
+table_prefix = "myapp_histver"        # table names: myapp_histver_stable/beta/nightly
+
+[rs-histver.network]
+timeout = 30                           # optional, default: 15 (seconds)
+max_concurrency = 5                    # optional, default: 10
+```
+
+- **Without `db_file`**: standalone mode — creates `<data_dir>/rs-histver.redb`
+- **With `db_file`**: shared mode — opens the host's redb file, uses `table_prefix` to avoid collisions
+- If `db_file` points to a non-redb file, it automatically falls back to standalone mode
+
+See [Library Usage — Embedded in Host Project](#embedded-in-host-project) for code examples.
 
 > **Note:** If upgrading from v0.1.x, the database format has changed. The old database will be automatically recreated on first run.
 
@@ -171,10 +240,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rs-histver = "0.2"
+rs-histver = "0.2.1"
 ```
 
-#### Basic Usage
+#### Standalone Usage
 
 ```rust
 use rs_histver::{HistVer, Config};
@@ -183,6 +252,9 @@ use rs_histver::{HistVer, Config};
 async fn main() -> anyhow::Result<()> {
     // Default: database at <exe_dir>/data/rs-histver.redb
     let hv = HistVer::new(Config::new())?;
+
+    // Or: custom database path
+    // let hv = HistVer::new(Config::with_db_path("/path/to/my-cache.redb"))?;
 
     // Fetch and cache releases
     let releases = hv.fetch_releases("stable", false, 30).await?;
@@ -198,14 +270,69 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-#### Custom Database Path
+#### Embedded in Host Project
+
+When embedded in a host project (e.g. Tauri app), the database path should be determined by the host's configuration. Use `ConfigBuilder` or `Config::from_config_file()` to achieve this.
+
+**Standalone mode (default):**
+
+Creates a dedicated `rs-histver.redb` file in `data_dir`.
+
+```rust
+use rs_histver::{HistVer, ConfigBuilder};
+
+let hv = HistVer::new(
+    ConfigBuilder::new()
+        .data_dir(app_data_dir)          // creates <data_dir>/rs-histver.redb
+        .build()?
+)?;
+```
+
+**Shared mode (host uses redb):**
+
+When the host project also uses redb, you can share the same database file. Configure `db_file` to point to the host's redb file, and `table_prefix` to avoid table name collisions.
 
 ```rust
 use rs_histver::{HistVer, Config};
 
-// Use a custom database location
-let hv = HistVer::new(Config::with_db_path("/path/to/my-cache.redb"))?;
+// From config file
+let hv = HistVer::new(Config::from_config_file("config.toml")?)?;
+
+// Or programmatically
+use rs_histver::ConfigBuilder;
+
+let hv = HistVer::new(
+    ConfigBuilder::new()
+        .data_dir(app_data_dir)
+        .db_file("myapp.redb")          // shared mode
+        .table_prefix("myapp_histver")
+        .build()?
+)?;
 ```
+
+If `db_file` points to a non-redb file, it automatically falls back to standalone mode (creates `rs-histver.redb` in the same directory).
+
+**Priority order:**
+
+```
+Programmatic override (highest) → config.toml → hardcoded defaults (lowest)
+```
+
+- `db_path()` overrides everything (complete file path, always standalone mode)
+- `db_file()` enables shared mode, combined with `data_dir()`
+- `data_dir()` alone → standalone mode: `<data_dir>/rs-histver.redb`
+- `table_prefix()` / `timeout()` / `max_concurrency()` override config.toml values
+- Missing config file or fields fall back to defaults silently
+
+**Variable substitution in config.toml:**
+
+| Variable | Resolves to | Example (Windows) |
+|----------|-------------|-------------------|
+| `$EXE_DIR` | Executable directory | `C:\Program Files\MyApp` |
+| `$HOME` | User home (`%USERPROFILE%` / `$HOME`) | `C:\Users\user` |
+| `~/` | User home (same as `$HOME`) | `~/data` → `C:\Users\user\data` |
+
+Variable substitution only applies to paths read from config.toml. Programmatic `data_dir()` / `db_path()` accept resolved `PathBuf` values.
 
 ## Design Patterns
 
