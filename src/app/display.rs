@@ -1,8 +1,10 @@
+#[cfg(feature = "cli")]
 use comfy_table::{Cell, Table};
 
+#[cfg(feature = "cli")]
 use crate::domain::RustRelease;
 
-/// Render releases as a formatted table
+#[cfg(feature = "cli")]
 pub(super) fn print_releases_table(releases: &[RustRelease], limit: usize) {
     let mut table = Table::new();
     table.set_header(vec![

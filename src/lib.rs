@@ -24,7 +24,9 @@ mod constants;
 mod domain;
 mod options;
 
+#[cfg(feature = "cli")]
 pub mod app;
+#[cfg(feature = "cli")]
 pub mod cli;
 pub(crate) mod infra;
 

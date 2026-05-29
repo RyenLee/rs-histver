@@ -26,6 +26,11 @@ path = "src/lib.rs"
 [[bin]]
 name = "rs-histver"
 path = "src/main.rs"
+required-features = ["cli"]
+
+[features]
+default = []
+cli = ["dep:clap", "dep:comfy-table"]
 
 [dependencies]
 reqwest = { version = "0.13", features = ["json", "rustls"], default-features = false }
@@ -35,5 +40,5 @@ anyhow = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 regex-lite = "0.1"
 async-trait = "0.1"
-clap = { version = "4", features = ["derive"] }
-comfy-table = "7"
+clap = { version = "4", features = ["derive"], optional = true }
+comfy-table = { version = "7", optional = true }

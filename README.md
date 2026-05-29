@@ -7,8 +7,8 @@
 
 A Rust library and CLI tool for querying historical release versions of the Rust programming language (stable, beta, nightly) via GitHub Releases API and rust-lang.org distribution server.
 
-**As a library**: One function call, pure in-memory result, zero file-system side effects.  
-**As a CLI**: Terminal-based query tool with formatted table output.
+**As a library**: One function call, pure in-memory result, zero file-system side effects, minimal dependencies.  
+**As a CLI**: Terminal-based query tool with formatted table output (optional feature).
 
 ## Table of Contents
 
@@ -19,12 +19,14 @@ A Rust library and CLI tool for querying historical release versions of the Rust
 - [Architecture](#architecture)
 - [API Reference](#api-reference)
 - [Data Sources](#data-sources)
+- [Feature Flags](#feature-flags)
 - [Development](#development)
 - [License](#license)
 
 ## Features
 
 - **Dual Mode**: Use as a Rust library or standalone CLI tool
+- **Optional CLI**: CLI dependencies (`clap`, `comfy-table`) are optional — library users get minimal dependency footprint
 - **Zero Side Effects**: Library mode has no database, config file, or file system dependencies
 - **Multiple Channels**: Query stable, beta, and nightly release channels
 - **Flexible Data Sources**: GitHub API for recent releases, RELEASES.md for complete history
@@ -34,16 +36,30 @@ A Rust library and CLI tool for querying historical release versions of the Rust
 
 ## Installation
 
-### Library
+### Library Only (Recommended)
 
-Add to your `Cargo.toml`:
+Add to your `Cargo.toml` for minimal dependencies:
 
 ```toml
 [dependencies]
 rs-histver = "0.4"
 ```
 
-### CLI Binary
+This installs **only the library** with no CLI dependencies (`clap`, `comfy-table`), resulting in:
+- Smaller dependency tree
+- Faster compilation
+- Smaller binary size
+
+### Library + CLI Binary
+
+To use both library and CLI tool:
+
+```toml
+[dependencies]
+rs-histver = { version = "0.4", features = ["cli"] }
+```
+
+Or install the CLI binary globally:
 
 ```bash
 cargo install rs-histver
@@ -54,7 +70,7 @@ Or build from source:
 ```bash
 git clone https://github.com/RyenLee/rs-histver.git
 cd rs-histver
-cargo build --release
+cargo build --release --features cli
 ```
 
 ## Library Usage
@@ -191,17 +207,17 @@ rs-histver fetch -c nightly --days 7
 rs-histver/
 ├── src/
 │   ├── lib.rs              # Library entry point
-│   ├── main.rs             # CLI entry point
+│   ├── main.rs             # CLI entry point (conditional)
 │   ├── constants.rs        # Centralized constants
 │   ├── domain.rs           # Domain models
 │   │   └── release.rs      # RustRelease struct
 │   ├── options.rs          # FetchOptions & NetworkConfig
-│   ├── app/                # Application layer
+│   ├── app/                # Application layer (CLI only)
 │   │   ├── handler.rs      # Business logic
 │   │   └── display.rs      # Table formatting
-│   ├── cli/                # CLI layer
+│   ├── cli/                # CLI layer (CLI only)
 │   │   └── types.rs        # Clap definitions
-│   └── infra/               # Infrastructure layer
+│   └── infra/              # Infrastructure layer
 │       ├── fetcher.rs      # ReleaseFetcher trait & factory
 │       └── fetcher/
 │           ├── stable.rs   # Stable channel implementation
@@ -218,17 +234,20 @@ rs-histver/
 │  CLI Layer (src/cli, src/main)          │
 │  - Argument parsing (clap)               │
 │  - Command routing                       │
+│  - [Conditional: requires "cli" feature] │
 └─────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────┐
 │  Application Layer (src/app)            │
 │  - Business orchestration (handler)     │
 │  - Result presentation (display)        │
+│  - [Conditional: requires "cli" feature] │
 └─────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────┐
 │  Domain Layer (src/domain)              │
 │  - Core model (RustRelease)             │
+│  - [Always included]                     │
 └─────────────────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────┐
@@ -236,8 +255,28 @@ rs-histver/
 │  - HTTP client (http)                   │
 │  - Data fetching (fetcher)              │
 │  - Channel implementations               │
+│  - [Always included]                     │
 └─────────────────────────────────────────┘
 ```
+
+### Conditional Compilation
+
+The project uses Rust's feature flags for conditional compilation:
+
+| Module | Condition | Included When |
+|--------|-----------|---------------|
+| `src/app` | `#[cfg(feature = "cli")]` | CLI feature enabled |
+| `src/cli` | `#[cfg(feature = "cli")]` | CLI feature enabled |
+| `src/domain` | Always | All builds |
+| `src/infra` | Always | All builds |
+| `src/constants` | Always | All builds |
+| `src/options` | Always | All builds |
+
+**Benefits:**
+- Library-only builds exclude CLI-specific code
+- Smaller binary size for library users
+- Faster compilation without CLI dependencies
+- Zero overhead for pure library usage
 
 ### Design Patterns
 
@@ -413,6 +452,62 @@ Create a channel-specific fetcher.
 - Method: Date probing for recent N days
 - Version extraction: Parses `[pkg.rust]` section
 
+## Feature Flags
+
+### Available Features
+
+| Feature | Default | Dependencies | Description |
+|---------|---------|--------------|-------------|
+| `cli` | No | `clap`, `comfy-table` | Enable CLI binary and terminal UI |
+
+### Usage Examples
+
+#### Library Only (No CLI)
+
+```toml
+[dependencies]
+rs-histver = "0.4"
+```
+
+**Dependencies included:**
+- `reqwest` (HTTP client)
+- `serde` (serialization)
+- `chrono` (date handling)
+- `tokio` (async runtime)
+- `anyhow` (error handling)
+- `regex-lite` (regex parsing)
+- `async-trait` (trait support)
+
+**Dependencies excluded:**
+- `clap` (CLI argument parser)
+- `comfy-table` (table formatting)
+
+#### Library + CLI
+
+```toml
+[dependencies]
+rs-histver = { version = "0.4", features = ["cli"] }
+```
+
+**Additional dependencies:**
+- `clap` (CLI argument parser)
+- `comfy-table` (table formatting)
+
+### Conditional Compilation
+
+When the `cli` feature is disabled:
+
+| Excluded Modules | Reason |
+|------------------|--------|
+| `src/app` | CLI-specific business logic |
+| `src/cli` | CLI argument parsing |
+| `src/main.rs` | Binary entry point |
+
+**Result:**
+- Smaller compiled library
+- Faster build times
+- No CLI-related code in final binary
+
 ## Constants
 
 All hardcoded values are centralized in `src/constants.rs`:
@@ -447,20 +542,36 @@ pub const STATIC_DIST_BASE_URL: &str = "https://static.rust-lang.org/dist";
 
 ### Building
 
+#### Library Only
+
 ```bash
-cargo build
+cargo build --lib
+```
+
+#### Library + CLI
+
+```bash
+cargo build --features cli
 ```
 
 ### Testing
 
 ```bash
+# Test library functionality
 cargo test
+
+# Test with CLI features
+cargo test --features cli
 ```
 
 ### Linting
 
 ```bash
+# Check all features
 cargo clippy --all-targets --all-features -- -D warnings
+
+# Check library only
+cargo clippy --lib -- -D warnings
 ```
 
 ### Documentation
@@ -475,16 +586,22 @@ cargo doc --open
 cargo publish
 ```
 
+**Note:** The published crate will include both library and CLI features, but users can choose which to enable.
+
 ## Changelog
 
 ### 0.4.0
 
 - **Breaking Change**: Removed database and config file dependencies
+- **New Feature**: Optional CLI via feature flags (`cli` feature)
 - Library mode is now pure in-memory with zero file-system side effects
+- CLI dependencies (`clap`, `comfy-table`) are now optional
+- Library-only builds have minimal dependency footprint
 - CLI mode simplified to fetch-and-display workflow
 - Centralized all constants in `src/constants.rs`
 - Improved error messages and documentation
 - Added comprehensive inline documentation
+- Conditional compilation for CLI-specific modules
 
 ### 0.3.0
 

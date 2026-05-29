@@ -1,18 +1,20 @@
+#[cfg(feature = "cli")]
 use anyhow::Result;
 
+#[cfg(feature = "cli")]
 use crate::cli::Commands;
+
+#[cfg(feature = "cli")]
 use crate::FetchOptions;
 
+#[cfg(feature = "cli")]
 use super::display::print_releases_table;
 
-/// Application core business layer.
-///
-/// Holds no state — stateless dispatch to `fetch_releases()`.
-/// `main()` parses CLI args and delegates to handler methods.
+#[cfg(feature = "cli")]
 pub struct App;
 
+#[cfg(feature = "cli")]
 impl App {
-    /// Dispatch subcommand to the corresponding handler method.
     pub async fn execute(command: Commands) -> Result<()> {
         match command {
             Commands::Fetch {
